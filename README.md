@@ -193,18 +193,13 @@ toBili 从数据层就是按账号拆开的：侧栏的账号列表可以**同�
 <table>
 <tr>
 <td width="50%"><img src="docs/images/activities.png?v=20261104" width="430" alt="活动页"><br><sub><b>活动库</b>：类型 / 状态 / 热度筛选，即将开奖，行内参与</sub></td>
-<td width="50%"><img src="docs/images/auto.png?v=20261104" width="430" alt="定时任务"><br><sub><b>定时任务</b>：周期计划、挂机模式、每小时上限</sub></td>
+<td width="50%"><img src="docs/images/sources.png?v=20261104" width="430" alt="数据源"><br><sub><b>数据源</b>：话题、合集与监控名单三路发现</sub></td>
 </tr>
 <tr>
-<td width="50%"><img src="docs/images/sources.png?v=20261104" width="430" alt="数据源"><br><sub><b>数据源</b>：话题、合集与监控名单三路发现</sub></td>
 <td width="50%"><img src="docs/images/settings.png?v=20261104" width="430" alt="设置"><br><sub><b>设置</b>：参与文案、通知、清理策略与诊断</sub></td>
+<td width="50%"><img src="docs/images/llm.png?v=20261104" width="430" alt="LLM 配置"><br><sub><b>LLM 配置</b>：兼容 OpenAI 接口，保存后先「测试连接」</sub></td>
 </tr>
 </table>
-
-<p align="center">
-<img src="docs/images/llm.png?v=20261104" alt="LLM 配置" width="620"><br>
-<sub><b>LLM 配置</b>：兼容 OpenAI 接口，保存后先「测试连接」再使用</sub>
-</p>
 
 <sub>截图来自本仓库构建的前端，运行在隔离的模拟账号与模拟活动数据上，不含任何个人账号信息；界面在 Windows Edge 中采集，非 macOS 实机截图。</sub>
 
