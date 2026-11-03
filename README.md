@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/images/logo.svg" width="120" alt="toBili Lite logo">
+
 # toBili Lite
 
 本地运行的 B 站抽奖桌面助手<br>
