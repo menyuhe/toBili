@@ -27,7 +27,7 @@ def source_files(root: Path = ROOT) -> list[Path]:
     for folder in ("upstream/tests", "upstream/scripts", "upstream/docs", "tests", "docs", "scripts"):
         files.extend(p for p in (root / folder).rglob("*")
                      if p.is_file() and not {"__pycache__", "node_modules", ".pytest_cache"}.intersection(p.relative_to(root).parts)
-                     and (p.suffix in {".png", ".webp", ".py", ".js", ".mjs", ".cjs", ".json", ".html", ".css", ".svg", ".md", ".txt", ".yaml", ".yml", ".sh", ".service"}
+                     and (p.suffix in {".png", ".webp", ".py", ".js", ".mjs", ".cjs", ".json", ".html", ".css", ".svg", ".gif", ".md", ".txt", ".yaml", ".yml", ".sh", ".service"}
                           or p.name in {"Dockerfile", "Caddyfile", "ToBili"}))
     for folder in ("upstream/src", "upstream/web"):
         files.extend(p for p in (root / folder).rglob("*.py")
