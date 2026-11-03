@@ -115,21 +115,6 @@ class NotificationDeliveryRow(SQLModel, table=True):
     message: str = "等待发送"
 
 
-class TicketTaskRow(SQLModel, table=True):
-    __tablename__ = "ticket_tasks"
-    id: str = Field(primary_key=True)
-    uid: str = Field(index=True)
-    state: str = "draft"
-    config_json: str = "{}"
-    message: str = "配置已保存"
-    order_id: str = ""
-    attempts: int = 0
-    created_at: int = 0
-    updated_at: int = 0
-    start_at: int = 0
-    history_json: str = "[]"
-
-
 class SchemaMeta(SQLModel, table=True):
     __tablename__ = "schema_meta"
 
@@ -371,10 +356,3 @@ class AccountStateRow(SQLModel, table=True):
     uid: str = Field(primary_key=True)
     key: str = Field(primary_key=True)
     value: str = Field(default="{}", sa_column=Column(Text, nullable=False))
-
-
-class SyncedRepostRow(SQLModel, table=True):
-    __tablename__ = "synced_reposts"
-    uid: str = Field(primary_key=True)
-    dynamic_id: str = Field(primary_key=True)
-    repost_id: str = Field(primary_key=True)

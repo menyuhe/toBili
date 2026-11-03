@@ -179,8 +179,6 @@ def run(uid, *, participate, eligible, progress):
                     if not payload.get('ok'):
                         raise RuntimeError(payload.get('message') or '参与失败')
                     update(did, 'success', '参与成功')
-                    from src.cloud_guard import confirm_cloud_writes
-                    confirm_cloud_writes()
                     joined += 1
                     progress(step=done, total=len(targets), message=f'{title}：参与成功',
                              log_append=f'{title}：参与成功\n{payload.get("log", "")}')

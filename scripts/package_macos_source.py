@@ -10,12 +10,12 @@ from build_macos import ROOT, ui_reference_files, validate_config, verify_ui_ref
 
 KIT_NAME = "toBili-macOS-BuildKit"
 FILES = (
-    "desktop.py", "scripts/build-windows.ps1", "scripts/desktop.spec", "upstream/web/article_emotes.json", "upstream/packaging/windows/binggo.ico", "desktop_platform.py", "desktop_instance.py", "scripts/desktop-macos.spec",
+    "desktop.py", "scripts/build-windows.ps1", "scripts/desktop.spec", "upstream/packaging/windows/binggo.ico", "desktop_platform.py", "desktop_instance.py", "scripts/desktop-macos.spec",
     "scripts/build-macos.command", "scripts/build_macos.py", "scripts/package_macos_source.py",
-    "requirements-desktop.txt", "README.md",
+    "requirements-desktop.txt", "README.md", "LICENSE",
     "pytest.ini", ".github/workflows/build-macos.yml",
-    "upstream/cloud/.env.example", "upstream/README.md", "upstream/requirements.txt", "upstream/config/sources.yaml",
-    "upstream/docs/multi-device-v1.md", "upstream/docs/multi-account.md",
+    "upstream/README.md", "upstream/requirements.txt", "upstream/config/sources.yaml",
+    "upstream/docs/multi-account.md",
     "upstream/config/cookies.txt.example", "upstream/config/llm.env.example",
     "upstream/packaging/assets/app-icon.png", "upstream/packaging/icon_raster.py",
     "upstream/packaging/macos/generate_icns.py", "upstream/web/static/favicon.svg",
@@ -24,7 +24,7 @@ FILES = (
 
 def source_files(root: Path = ROOT) -> list[Path]:
     files = [root / name for name in FILES]
-    for folder in ("upstream/cloud", "upstream/tests", "upstream/scripts", "upstream/docs", "tests", "docs", "scripts"):
+    for folder in ("upstream/tests", "upstream/scripts", "upstream/docs", "tests", "docs", "scripts"):
         files.extend(p for p in (root / folder).rglob("*")
                      if p.is_file() and not {"__pycache__", "node_modules", ".pytest_cache"}.intersection(p.relative_to(root).parts)
                      and (p.suffix in {".png", ".webp", ".py", ".js", ".mjs", ".cjs", ".json", ".html", ".css", ".svg", ".md", ".txt", ".yaml", ".yml", ".sh", ".service"}

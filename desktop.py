@@ -129,14 +129,11 @@ def main() -> int:
                 assert client.get("/api/activities").status_code == 200
                 assert client.get("/api/accounts").status_code == 200
                 assert client.get("/api/settings").status_code == 200
-                cloud_status = client.get("/api/cloud/status")
-                assert cloud_status.status_code == 200 and cloud_status.json()["connected"] is False
                 notification_settings = client.get("/api/notifications/settings")
                 assert notification_settings.status_code == 200
                 assert "webhook" not in notification_settings.json()
                 assert client.get("/api/notifications/history").status_code == 200
                 assert client.get("/api/collections").status_code == 200
-                assert client.get("/api/tickets/tasks").status_code == 401
                 deadline = time.monotonic() + 30
                 while time.monotonic() < deadline:
                     state = window.evaluate_js("({title:document.title, ready:!!document.querySelector('#section-sources') && !!document.querySelector('#account-add') && !!document.querySelector('#account-list'), links:document.querySelectorAll('#source-grid a[href*=\"space.bilibili.com\"]').length})")

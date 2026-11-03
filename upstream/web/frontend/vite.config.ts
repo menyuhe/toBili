@@ -19,7 +19,8 @@ export default defineConfig({
     outDir: path.resolve(rootDir, "../static/dist"),
     emptyOutDir: true,
     assetsDir: "assets",
-    sourcemap: true,
+    // 构建产物随源码分发，不生成 sourcemap：体积减半，也不会把 TS 源码明文打进包里。
+    sourcemap: false,
   },
   server: {
     port: 5173,

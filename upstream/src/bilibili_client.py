@@ -167,8 +167,6 @@ class BilibiliClient:
         acquire_bilibili_request_slot()
         with self._http_lock:
             check_cancelled()
-            from src.cloud_guard import check_cloud_write
-            check_cloud_write()
             if self.account_context and self.account_context.uid:
                 from src.accounts import cookie_path
                 if not cookie_path(self.account_context.uid).exists():

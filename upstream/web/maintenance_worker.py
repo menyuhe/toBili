@@ -29,8 +29,6 @@ class MaintenanceWorker:
             return
         recover_deliveries()
         recover_cleanup_steps()
-        from src.tickets import recover_tasks
-        recover_tasks()
         from src.accounts import list_accounts
         from src.account_context import account_scope
         from web.auto_scheduler import auto_scheduler
@@ -50,7 +48,7 @@ class MaintenanceWorker:
         for scheduler in auto_scheduler.items.values():
             scheduler.stop(reason="软件退出")
         from web.job_runner import runner
-        if runner.is_running() and str(runner.get_status().action).startswith(("maintenance_", "ticket_")):
+        if runner.is_running() and str(runner.get_status().action).startswith("maintenance_"):
             runner.cancel()
         for thread in (self.thread, self.sender):
             if thread:
@@ -63,9 +61,6 @@ class MaintenanceWorker:
         runner = job_runner or runner
         uid = str(get_login_uid() or "")
         if not uid or runner.is_running():
-            return False
-        from src.cloud_client import cloud_client, load_connection
-        if load_connection() and cloud_client.blocked_reason():
             return False
         from web.schedule_config import load
         if load(uid).nonstop:
@@ -90,15 +85,12 @@ class MaintenanceWorker:
     def loop(self):
         while not self.stop_event.wait(1):
             try:
-                from src.tickets import tick
-                from web.job_runner import runner
                 from src.accounts import list_accounts
                 from src.account_context import account_scope
                 for account in list_accounts():
                     if account.get("logged_in"):
                         with account_scope(account["uid"]):
-                            if not tick(runner):
-                                self.tick()
+                            self.tick()
             except Exception:
                 from src.app_logging import get_logger
                 get_logger("maintenance").warning("本轮维护调度失败，将稍后重试")

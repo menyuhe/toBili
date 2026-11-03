@@ -84,13 +84,10 @@ DIST_DIR = STATIC_DIR / "dist"
 @asynccontextmanager
 async def lifespan(_app):
     from web.maintenance_worker import worker
-    from src.cloud_client import cloud_client
     worker.start()
-    cloud_client.start()
     try:
         yield
     finally:
-        cloud_client.stop()
         worker.stop()
 
 
@@ -131,14 +128,8 @@ from web.maintenance_routes import router as maintenance_router
 app.include_router(maintenance_router)
 from web.source_routes import router as source_router
 app.include_router(source_router)
-from web.ticket_routes import router as ticket_router
-app.include_router(ticket_router)
 from web.pool_routes import router as pool_router
 app.include_router(pool_router)
-from web.cloud_routes import router as cloud_router
-app.include_router(cloud_router)
-from web.article_routes import router as article_router
-app.include_router(article_router)
 
 _JOB_REQUIRES_LOGIN = frozenset(
     {
@@ -331,9 +322,6 @@ def api_start_job(request: JobRequest) -> dict[str, Any]:
         dynamic_id = str(params.get("dynamic_id") or "").strip()
         if not is_valid_dynamic_id(dynamic_id):
             raise AppError(ErrorCode.VALIDATION_ERROR, "活动 ID 无效")
-    from src.cloud_client import cloud_client, load_connection
-    if request.action != "login" and load_connection() and cloud_client.blocked_reason():
-        raise AppError(ErrorCode.VALIDATION_ERROR, cloud_client.blocked_reason())
     if runner.try_start(request.action, params, source="ui") is None:
         raise AppError(ErrorCode.JOB_BUSY, "已有任务正在运行")
     return {"ok": True, "job": runner.get_status().to_dict()}

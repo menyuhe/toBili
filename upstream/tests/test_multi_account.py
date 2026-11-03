@@ -109,7 +109,6 @@ def test_jobs_run_concurrently_with_fixed_identity(monkeypatch):
         barrier.wait(timeout=5)
         return {"ok": True, "message": "mock done"}
     monkeypatch.setattr("web.job_runner.run_action", action)
-    monkeypatch.setattr("src.cloud_client.load_connection", lambda: None)
     with account_scope("101"):
         a = broker.try_start("participate", {})
     with account_scope("202"):
@@ -150,7 +149,6 @@ def test_same_account_queue_is_serial_and_cancellable(monkeypatch):
         assert release.wait(5)
         return {"ok": True}
     monkeypatch.setattr("web.job_runner.run_action", action)
-    monkeypatch.setattr("src.cloud_client.load_connection", lambda: None)
     with account_scope("101"):
         first = broker.try_start("participate", {"number": 1})
         assert entered.wait(3)
@@ -166,22 +164,6 @@ def test_same_account_queue_is_serial_and_cancellable(monkeypatch):
     assert order == [1, 2]
     assert get_job(second)["state"] == "success"
     assert get_job(third)["state"] == "cancelled"
-
-
-def test_article_owner_and_candidates_do_not_change_with_selection():
-    from web.article_routes import account_uid, article_rows
-    from src.activity_archive import archive_activity_ids
-    from src.activity_store import append_activities
-    for uid in ("101", "202"):
-        accounts.register_cookie(cookie(uid))
-    with account_scope("101"):
-        append_activities([{"dynamic_id": "123", "lottery_type": "转发抽奖", "platform_participated": True}])
-        archive_activity_ids({"123"})
-        assert account_uid() == "101"
-        assert "123" in article_rows()
-    with account_scope("202"):
-        assert account_uid() == "101"
-        assert "123" in article_rows()
 
 
 def test_api_requires_identity_and_does_not_cross_account_history():

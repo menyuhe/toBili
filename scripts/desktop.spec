@@ -5,8 +5,6 @@ root = Path(SPECPATH).parent
 upstream = root / 'upstream'
 datas = [(str(upstream / 'web/static/dist'), 'web/static/dist'),
          (str(upstream / 'web/static/favicon.svg'), 'web/static'),
-         (str(upstream / 'web/article_emotes.json'), 'web'),
-         (str(upstream / 'web/static/article-emotes'), 'web/static/article-emotes'),
          (str(upstream / 'config/sources.yaml'), 'config'),
          (str(upstream / 'config/cookies.txt.example'), 'config'),
          (str(upstream / 'config/llm.env.example'), 'config')]

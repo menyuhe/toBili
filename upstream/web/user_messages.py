@@ -15,7 +15,6 @@ PARTICIPATE_ACTION_LABELS: dict[str, str] = {
 }
 
 JOB_ACTION_LABELS: dict[str, str] = {
-    "ticket_run": "会员购下单",
     "maintenance_check": "检查开奖结果",
     "maintenance_clean": "执行到期清理",
     "maintenance_cycle": "开奖与清理维护",

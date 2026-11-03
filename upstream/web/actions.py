@@ -357,10 +357,6 @@ def _run_action(
     log_lines: list[str] = []
     _raise_if_cancelled(cancel_event)
 
-    if action == "ticket_run":
-        from src.tickets import run_task
-        return run_task(str(params["uid"]), str(params["task_id"]), progress)
-
     if action.startswith("maintenance_"):
         from src.bilibili_auth import get_login_uid
         from src.cleanup_api import CleanupApi

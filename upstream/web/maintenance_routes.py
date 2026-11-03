@@ -34,7 +34,7 @@ class NotificationSettingsRequest(StrictRequest):
     webhook: str | None = Field(default=None, max_length=2000)
     sign_secret: str | None = Field(default=None, max_length=200)
     prefix: str = Field(default="Binggo", max_length=50)
-    events: list[Literal["won", "at", "login", "failure", "cleanup", "ticket"]]
+    events: list[Literal["won", "at", "login", "failure", "cleanup"]]
 
 
 class ChannelRequest(StrictRequest):

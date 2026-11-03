@@ -39,7 +39,7 @@ def test_source_export_excludes_runtime_canaries(tmp_path):
     safe_files = ("upstream/src/main.py", "upstream/web/app.py", "upstream/web/static/dist/index.html",
                   "upstream/web/frontend/src/main.ts")
     private_files = ("upstream/config/cookies.txt", "upstream/config/llm.env", "upstream/config/notifications.json",
-                     "upstream/config/ticket_contacts.json", "upstream/data/binggo.db", "用户数据/config/cookies.txt",
+                     "upstream/data/binggo.db", "用户数据/config/cookies.txt",
                      "upstream/web/frontend/node_modules/test/index.js", "upstream/web/__pycache__/app.pyc")
     for relative in safe_files + private_files:
         path = tmp_path / relative

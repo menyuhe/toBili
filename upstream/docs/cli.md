@@ -10,8 +10,6 @@ python scripts/check_ds4.py # DS-4 J君名更新检查
 python scripts/check_ds5.py # DS-5 互动抽奖娘更新检查
 python scripts/check_ds6.py # DS-6 糯米是个背包更新检查
 python scripts/check_ds7.py # DS-7 大锦鲤更新检查
-python scripts/merge_links.py # 合并各数据源的活动链接
-python scripts/classify_links.py # 活动链接抽奖类型分类
 python scripts/fetch_activity_info.py # 抽奖活动信息拉取
 python scripts/participate.py # 参与活动（互动/转发/预约）
 python scripts/run_dashboard.py # 本地 Web 控制台
@@ -120,31 +118,6 @@ python scripts/check_ds7.py --force
 ```
 
 **功能**：检查最新 Opus 帖是否更新，有更新时从正文提取活动链接；`--force` 强制重新解析当前最新 Opus 帖。
-
-## `merge_links.py`
-
-**说明**：合并各数据源的活动链接
-
-**指令**：
-
-```bash
-python scripts/merge_links.py
-```
-
-**功能**：读取各数据源的最新结果，按动态 ID 去重合并，写入 `data/output/merged_latest.json`。输出中包含 `new_activity_ids` / `new_count`，用于标识尚未出现在 `enriched_latest.json` 中的新链接。
-
-## `classify_links.py`
-
-**说明**：活动链接抽奖类型分类
-
-**指令**：
-
-```bash
-python scripts/classify_links.py
-python scripts/classify_links.py --force
-```
-
-**功能**：读取合并结果，通过 B 站 API 将每条活动归类为转发抽奖、预约抽奖或互动抽奖，写入 `data/output/classified_latest.json`。默认仅对 `classified_latest.json` 中尚未出现的新链接发起分类，已有记录直接复用；`--force` 忽略缓存并全量重跑。
 
 ## `fetch_activity_info.py`
 

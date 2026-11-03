@@ -75,21 +75,13 @@ def test_failed_item_stops_pool_and_can_requeue(selected):
     assert calls == IDS
 
 
-def test_only_durable_success_confirms_cloud_writes_before_next_login_check(selected):
-    from src.cloud_guard import guarded_writes, check_cloud_write
-    confirmed = []
-    def confirm():
-        assert IDS[0] not in [r['dynamic_id'] for r in pool.snapshot('123')['items']]
-        confirmed.append(IDS[0])
+def test_only_durable_success_survives_a_failed_login_check(selected):
     def eligible(did):
         if did == IDS[1]:
             raise RuntimeError('登录状态暂时无法核验')
     def participate(did, report):
-        check_cloud_write()
         return {'ok': True}
-    with guarded_writes(lambda: None, confirm):
-        result = execute(participate, eligible=eligible)
-    assert confirmed == [IDS[0]]
+    result = execute(participate, eligible=eligible)
     assert result['result']['joined'] == 1 and result['result']['failed'] == 1
     assert [r['dynamic_id'] for r in pool.snapshot('123')['items']] == IDS[1:]
 

@@ -3,12 +3,10 @@ import pytest
 from web.actions import run_action
 from web.activity_service import participate_step_budget
 from web.schemas.jobs import ALLOWED_JOB_ACTIONS
-from src.cloud_protocol import LOCAL_ACTIONS
 
 
 def test_retired_action_cannot_execute():
     assert "participate_triple" not in ALLOWED_JOB_ACTIONS
-    assert "participate_triple" not in LOCAL_ACTIONS
     with pytest.raises(ValueError, match="未知操作"):
         run_action("participate_triple")
 

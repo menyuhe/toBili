@@ -27,11 +27,9 @@ class AccountMiddleware:
                 return await JSONResponse({"detail": "账号不存在"}, status_code=404)(scope, receive, send)
         else:
             registered = accounts.list_accounts()
-            if len(registered) > 1 and not scope["path"].startswith(("/api/accounts", "/api/article")):
+            if len(registered) > 1 and not scope["path"].startswith("/api/accounts"):
                 return await JSONResponse({"detail": "多账号请求必须指定 X-Account-UID"}, status_code=400)(scope, receive, send)
             uid = accounts.default_uid()
-        if scope["path"].startswith("/api/article"):
-            uid = accounts.read_state("__global__", "editorial_uid", uid)
         with account_scope(uid):
             await self.app(scope, receive, send)
 

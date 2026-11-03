@@ -20,7 +20,7 @@ from src.db.session import session_scope
 from src.log_redact import redact_text
 from src.secure_files import write_text_secret
 
-KINDS = {"won": "中奖", "at": "@ 未读增加", "login": "登录失效", "failure": "任务失败", "cleanup": "清理汇总", "ticket": "会员购订单与验证"}
+KINDS = {"won": "中奖", "at": "@ 未读增加", "login": "登录失效", "failure": "任务失败", "cleanup": "清理汇总"}
 DEFAULTS = {"audio": False, "dingtalk": False, "webhook": "", "sign_secret": "", "prefix": "toBili",
             "events": ["won", "login", "failure", "cleanup"]}
 _lock = threading.RLock()

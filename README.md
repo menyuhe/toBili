@@ -10,8 +10,9 @@
 ![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11%20%C2%B7%20macOS-lightgrey)
 ![Frontend](https://img.shields.io/badge/Frontend-Prebundled-brightgreen)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-[界面预览](#界面预览) · [功能](#功能) · [安装](#安装) · [首次使用](#首次使用) · [数据与升级](#数据与升级) · [开发与构建](#开发与构建) · [目录结构](#目录结构)
+[界面预览](#界面预览) · [功能](#功能) · [安装](#安装) · [首次使用](#首次使用) · [数据与升级](#数据与升级) · [开发与构建](#开发与构建) · [目录结构](#目录结构) · [许可](#许可)
 
 </div>
 
@@ -155,6 +156,7 @@ python scripts/package_release.py source
 ```text
 .
 ├── README.md                 # 项目介绍、安装、开发与发行入口
+├── LICENSE                   # MIT 许可
 ├── .github/workflows/        # CI（macOS 构建手动触发）
 ├── desktop.py                # 原生桌面入口
 ├── desktop_platform.py       # 平台与独立数据目录
@@ -174,6 +176,18 @@ python scripts/package_release.py source
     └── config/               # 仅配置模板
 ```
 
+## 许可
+
+本项目采用 [MIT License](LICENSE)。
+
+你可以自由地：
+
+- **商用** —— 用于商业产品、内部系统或对外服务，无需付费，也无需告知作者
+- **修改** —— 改代码、改界面、改功能，随意
+- **分发与二创** —— 复制、合并、发布、再授权，包括闭源分发
+
+唯一要求：在副本或实质性部分中保留版权声明与许可声明。软件按现状提供，不附带担保。
+
 ## 反馈与贡献
 
 - 报告问题请提供：系统版本、程序版本、复现步骤、脱敏日志
@@ -184,6 +198,6 @@ python scripts/package_release.py source
 
 <div align="center">
 
-<sub>本项目按现状提供，不附带任何担保。</sub>
+<sub>MIT License · 可自由使用、修改、商用与再分发，不附带任何担保。</sub>
 
 </div>

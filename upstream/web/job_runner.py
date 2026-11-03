@@ -620,12 +620,11 @@ class JobRunner:
             )
             on_progress = self._make_progress_callback(job_id)
             try:
-                from src.cloud_client import cloud_client
                 from src.task_control import task_cancellation
                 with task_cancellation(cancel_event):
-                    payload = cloud_client.execute(job_id, action, params, lambda: run_action(
+                    payload = run_action(
                         action, params, on_progress=on_progress, cancel_event=cancel_event,
-                    ))
+                    )
                 if not isinstance(payload, dict):
                     raise RuntimeError("run_action 返回值无效")
 
@@ -697,12 +696,7 @@ class JobRunner:
                         started_mono=started_mono,
                     )
                     return
-                from src.cloud_client import CloudExecutionBlocked
-                blocked = isinstance(exc, CloudExecutionBlocked)
-                if blocked:
-                    logger.warning("任务暂停：%s", str(exc))
-                else:
-                    logger.exception("任务失败 job_id=%s action=%s", job_id, action)
+                logger.exception("任务失败 job_id=%s action=%s", job_id, action)
                 result = None
                 if action == "login":
                     current = self.get_status()
@@ -712,9 +706,9 @@ class JobRunner:
                     job_id,
                     state="error",
                     message=friendly_error(exc),
-                    log=str(exc) if blocked else sanitize_log(traceback.format_exc()) or friendly_error(exc),
+                    log=sanitize_log(traceback.format_exc()) or friendly_error(exc),
                     result=result,
-                    error_kind="blocked" if blocked else "internal",
+                    error_kind="internal",
                     started_mono=started_mono,
                 )
 

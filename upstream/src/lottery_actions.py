@@ -240,10 +240,6 @@ def is_favorited(client: BilibiliClient, *, dynamic_id: str, referer: str) -> bo
 
 
 def is_reposted(client: BilibiliClient, *, dynamic_id: str, referer: str) -> bool:
-    from src.repost_sync import verified_repost
-    uid = get_login_uid()
-    if uid and verified_repost(client, uid, dynamic_id):
-        return True
     notice = fetch_notice_for_interact(client, dynamic_id)
     if notice:
         return bool(notice[0].get("reposted"))

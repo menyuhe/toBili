@@ -451,7 +451,7 @@ class AutoScheduler:
         self._log("info", f"点击按钮：{label} ({action})")
 
         # Maintenance is low priority and shares the job slot. Wait, never fatal/cancel it.
-        while self._runner.is_running() and str(self._runner.get_status().action).startswith(("maintenance_", "ticket_")):
+        while self._runner.is_running() and str(self._runner.get_status().action).startswith("maintenance_"):
             self._set_phase("等待维护任务", "开奖维护完成后继续自动参与")
             if self._stop_event.wait(1):
                 return {"skipped": True, "message": "调度已停止"}

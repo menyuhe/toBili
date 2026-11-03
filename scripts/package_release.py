@@ -46,6 +46,7 @@ def main():
         if not (base / "toBili.exe").is_file():
             raise RuntimeError("Build scripts/desktop.spec first")
         shutil.copy2(ROOT / "README.md", base / "README.md")
+        shutil.copy2(ROOT / "LICENSE", base / "LICENSE")
         shutil.copytree(ROOT / "docs", base / "docs", dirs_exist_ok=True)
         paths = {p for p in base.rglob("*") if p.is_file()}
         front = base / "_internal/web/static/dist"
