@@ -20,12 +20,13 @@
 ![概览](docs/images/overview.png)
 
 <details>
-<summary><b>活动管理与设置</b>（点击展开）</summary>
+<summary><b>活动管理、设置与模型配置</b>（点击展开）</summary>
 
 <br>
 
 ![活动管理](docs/images/activities.png)
 ![设置](docs/images/settings.png)
+![LLM 配置](docs/images/llm.png)
 
 </details>
 
@@ -57,7 +58,7 @@
 
 ### 便携包（Windows）
 
-从 Releases 下载 `toBili-20261103-Windows-x64.zip`，解压后运行 `toBili.exe`。
+从 [Releases](https://github.com/menyuhe/toBili/releases/latest) 下载 `toBili-20261103-Windows-x64.zip`，解压后运行 `toBili.exe`。同页附 `SHA256SUMS.txt` 可用于校验。
 
 需要 Windows 10/11 x64 与 Microsoft Edge WebView2 Runtime。整个目录一起解压，**不能只移动 EXE**。未配置活动源或远端不可用时，界面仍可打开，但无法保证获取新活动。
 
@@ -154,7 +155,6 @@ python scripts/package_release.py source
 ```text
 .
 ├── README.md                 # 项目介绍、安装、开发与发行入口
-├── NOTICE.md                 # 来源与许可声明
 ├── .github/workflows/        # CI（macOS 构建手动触发）
 ├── desktop.py                # 原生桌面入口
 ├── desktop_platform.py       # 平台与独立数据目录

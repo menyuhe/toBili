@@ -12,7 +12,7 @@ KIT_NAME = "toBili-macOS-BuildKit"
 FILES = (
     "desktop.py", "scripts/build-windows.ps1", "scripts/desktop.spec", "upstream/web/article_emotes.json", "upstream/packaging/windows/binggo.ico", "desktop_platform.py", "desktop_instance.py", "scripts/desktop-macos.spec",
     "scripts/build-macos.command", "scripts/build_macos.py", "scripts/package_macos_source.py",
-    "requirements-desktop.txt", "README.md", "NOTICE.md",
+    "requirements-desktop.txt", "README.md",
     "pytest.ini", ".github/workflows/build-macos.yml",
     "upstream/cloud/.env.example", "upstream/README.md", "upstream/requirements.txt", "upstream/config/sources.yaml",
     "upstream/docs/multi-device-v1.md", "upstream/docs/multi-account.md",

@@ -107,7 +107,7 @@ def main() -> int:
         stage = Path(temporary)
         # ditto preserves bundle symlinks, executable permissions and metadata.
         run("ditto", str(app), str(stage / "toBili.app"))
-        for name in ("README.md", "NOTICE.md"):
+        for name in ("README.md",):
             shutil.copy2(ROOT / name, stage / name)
         shutil.copytree(ROOT / "docs", stage / "docs")
         for source in ui_reference_files():

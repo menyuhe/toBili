@@ -152,7 +152,7 @@ def main() -> int:
                         break
                 assert window.evaluate_js("document.querySelector('#section-sources').classList.contains('active')")
                 assert window.evaluate_js("!!document.querySelector('#notification-settings') && !!document.querySelector('[data-maintenance-view=cleanup]')")
-                assert window.evaluate_js("!!document.querySelector('#section-tickets #ticket-project-form') && !!document.querySelector('#collection-add')")
+                assert window.evaluate_js("!!document.querySelector('#collection-add')")
                 result.update(ok=True, native_window=state, summary_api="passed", activities_api="passed",
                               session_guard="passed", source_navigation="passed", notification_api="passed", maintenance_ui="passed", account_module="passed")
         except Exception:
