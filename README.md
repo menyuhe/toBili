@@ -31,7 +31,7 @@
 </div>
 
 <div align="center">
-<img src="docs/images/demo.gif?v=20261104" alt="toBili 操作演示：切换账号 → 三路发现 → 活动筛选 → 定时任务 → LLM 配置" width="880">
+<img src="docs/images/demo.gif?v=20261105" alt="toBili 操作演示：切换账号 → 三路发现 → 活动筛选 → 定时任务 → LLM 配置" width="880">
 <br>
 <sub>切换账号 → 三路发现 → 活动筛选 → 定时任务 → LLM 配置（约 30 秒走完主要流程）</sub>
 </div>
@@ -91,7 +91,7 @@ toBili 把这条链路收进一个本地窗口：合集和话题自动发现 →
 toBili 从数据层就是按账号拆开的：侧栏的账号列表可以**同时挂着多个号**，随时点一下就切换视图，扫码对话框再扫一次就是「添加」，原有账号的登录状态不受影响。
 
 <p align="center">
-<img src="docs/images/accounts.png?v=20261104" alt="侧栏账号列表：一个号在跑预选池，另一个号有 3 条消息待核查" width="300"><br>
+<img src="docs/images/accounts.png?v=20261105" alt="侧栏账号列表：一个号在跑预选池，另一个号有 3 条消息待核查" width="300"><br>
 <sub>一个号在跑预选池（3/12），另一个号有 3 条消息待核查——各自独立</sub>
 </p>
 
@@ -124,7 +124,7 @@ toBili 从数据层就是按账号拆开的：侧栏的账号列表可以**同�
 三者入库前统一分类：官方互动组件走平台开奖接口，预约卡片走预约识别，其余转发抽奖用 LLM 解析正文；充电与非抽奖活动不入库。
 
 <p align="center">
-<img src="docs/images/sources.png?v=20261104" alt="数据源页：话题发现、UP 合集与监控名单" width="920">
+<img src="docs/images/sources.png?v=20261105" alt="数据源页：话题发现、UP 合集与监控名单" width="920">
 </p>
 
 > 日常建议点单个源的「更新此源」；「一键更新」会串行扫全部合集，请求更猛，更适合空库首次灌库。
@@ -169,7 +169,7 @@ toBili 从数据层就是按账号拆开的：侧栏的账号列表可以**同�
 - **撞车保护**：已有任务在跑时延后执行；「停止调度」只停计划，**不取消**正在进行的参与。
 
 <p align="center">
-<img src="docs/images/auto.png?v=20261104" alt="定时任务面板：周期配置、挂机模式与每小时上限" width="920">
+<img src="docs/images/auto.png?v=20261105" alt="定时任务面板：周期配置、挂机模式与每小时上限" width="920">
 </p>
 
 ### 开奖核查与安全清理
@@ -196,15 +196,15 @@ toBili 从数据层就是按账号拆开的：侧栏的账号列表可以**同�
 
 <table>
 <tr>
-<td colspan="2" align="center"><img src="docs/images/overview.png?v=20261104" width="820" alt="概览：多账号、活动统计与快捷操作"><br><sub><b>概览</b>：当前账号资料、活动统计与快捷操作；左侧一列就是所有在挂的号</sub></td>
+<td colspan="2" align="center"><img src="docs/images/overview.png?v=20261105" width="820" alt="概览：多账号、活动统计与快捷操作"><br><sub><b>概览</b>：当前账号资料、活动统计与快捷操作；左侧一列就是所有在挂的号</sub></td>
 </tr>
 <tr>
-<td width="50%"><img src="docs/images/activities.png?v=20261104" width="430" alt="活动页"><br><sub><b>活动库</b>：类型 / 状态 / 热度筛选，即将开奖，行内参与</sub></td>
-<td width="50%"><img src="docs/images/sources.png?v=20261104" width="430" alt="数据源"><br><sub><b>数据源</b>：话题、合集与监控名单三路发现</sub></td>
+<td width="50%"><img src="docs/images/activities.png?v=20261105" width="430" alt="活动页"><br><sub><b>活动库</b>：类型 / 状态 / 热度筛选，即将开奖，行内参与</sub></td>
+<td width="50%"><img src="docs/images/sources.png?v=20261105" width="430" alt="数据源"><br><sub><b>数据源</b>：话题、合集与监控名单三路发现</sub></td>
 </tr>
 <tr>
-<td width="50%"><img src="docs/images/settings.png?v=20261104" width="430" alt="设置"><br><sub><b>设置</b>：参与文案、通知、清理策略与诊断</sub></td>
-<td width="50%"><img src="docs/images/llm.png?v=20261104" width="430" alt="LLM 配置"><br><sub><b>LLM 配置</b>：兼容 OpenAI 接口，保存后先「测试连接」</sub></td>
+<td width="50%"><img src="docs/images/settings.png?v=20261105" width="430" alt="设置"><br><sub><b>设置</b>：参与文案、通知、清理策略与诊断</sub></td>
+<td width="50%"><img src="docs/images/llm.png?v=20261105" width="430" alt="LLM 配置"><br><sub><b>LLM 配置</b>：兼容 OpenAI 接口，保存后先「测试连接」</sub></td>
 </tr>
 </table>
 
