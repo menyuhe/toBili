@@ -17,16 +17,16 @@
 
 ## 界面预览
 
-![概览](docs/images/overview.png)
+![概览](docs/images/overview.png?v=20261103)
 
 <details>
 <summary><b>活动管理、设置与模型配置</b>（点击展开）</summary>
 
 <br>
 
-![活动管理](docs/images/activities.png)
-![设置](docs/images/settings.png)
-![LLM 配置](docs/images/llm.png)
+![活动管理](docs/images/activities.png?v=20261103)
+![设置](docs/images/settings.png?v=20261103)
+![LLM 配置](docs/images/llm.png?v=20261103)
 
 </details>
 
@@ -163,15 +163,14 @@ python scripts/package_release.py source
 ├── scripts/                  # Windows / macOS 构建、发行打包
 ├── tests/                    # 桌面与打包测试
 ├── docs/
-│   ├── images/               # logo 与界面截图
-│   └── UPSTREAM.md           # 上游原始 README
+│   └── images/               # logo 与界面截图
 └── upstream/                 # 业务代码
     ├── src/                  # 数据、参与、消息与清理逻辑
     ├── web/                  # 本地 API 与 TypeScript 前端
     │   ├── frontend/         # 前端源码（Vite + TypeScript）
     │   └── static/dist/      # 已编译前端，随源码分发
     ├── tests/                # 业务回归测试
-    ├── scripts/              # 上游脚本
+    ├── scripts/              # 辅助脚本
     └── config/               # 仅配置模板
 ```
 
