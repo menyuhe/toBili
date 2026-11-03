@@ -26,9 +26,9 @@ jobs:
         run: python scripts/build_macos.py
       - uses: actions/upload-artifact@v4
         with:
-          name: toBili-Lite-preview-macOS-${{ matrix.arch }}
+          name: toBili-macOS-${{ matrix.arch }}
           if-no-files-found: error
           path: |
-            dist/toBili-Lite-preview-macOS-${{ matrix.arch }}.dmg
-            dist/toBili-Lite-preview-macOS-${{ matrix.arch }}.zip
-            dist/toBili-Lite-preview-macOS-${{ matrix.arch }}-SHA256.txt
+            dist/toBili-macOS-${{ matrix.arch }}.dmg
+            dist/toBili-macOS-${{ matrix.arch }}.zip
+            dist/toBili-macOS-${{ matrix.arch }}-SHA256.txt
