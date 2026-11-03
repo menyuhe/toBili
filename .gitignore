@@ -19,6 +19,8 @@ user-data/
 build/
 build-output/
 dist/
+# 例外：随源码一起分发的前端构建产物，保证 clone 后无需 npm build 即可运行
+!upstream/web/static/dist/
 发行包/
 **/test-results/
 **/playwright-report/
