@@ -17,9 +17,9 @@ def test_mac_data_is_outside_bundle(monkeypatch, tmp_path):
     monkeypatch.delenv("BINGGO_PORTABLE", raising=False)
     monkeypatch.setattr(desktop_platform.Path, "home", lambda: tmp_path)
     app_dir = tmp_path / "Applications/toBili.app/Contents/MacOS"
-    assert desktop_platform.default_home(app_dir) == tmp_path / "Library/Application Support/toBili-Lite-Preview"
+    assert desktop_platform.default_home(app_dir) == tmp_path / "Library/Application Support/toBili"
     monkeypatch.setenv("BINGGO_PORTABLE", "1")
-    assert desktop_platform.default_home(app_dir) == tmp_path / "Applications/toBili-Lite-Preview-data"
+    assert desktop_platform.default_home(app_dir) == tmp_path / "Applications/toBili-data"
     assert desktop_platform.gui_backend() == "cocoa"
 
 

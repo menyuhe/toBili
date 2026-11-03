@@ -14,7 +14,7 @@ type Candidate = { association: Association; dynamic_id: string; title: string; 
 type History = { title?: string; channel?: string; state: string; message: string; created_at?: number; recorded_at?: number; action?: string; target_id?: string };
 const outcomes: Record<string, string> = { pending: "待开奖", unknown: "待确认", won: "已中奖", lost: "未中奖" };
 const states: Record<string, string> = { pending: "尚未执行", running: "执行中", done: "已完成", unknown: "待核实", blocked: "已保留", sent: "已发送", sending: "发送中", failed: "失败", skipped: "已跳过" };
-const events = { won: "中奖", at: "@ 未读增加", login: "登录失效", failure: "任务失败", cleanup: "清理汇总", ticket: "会员购订单与验证" };
+const events = { won: "中奖", at: "@ 未读增加", login: "登录失效", failure: "任务失败", cleanup: "清理汇总" };
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const input = (id: string) => el<HTMLInputElement>(id);
 const date = (stamp: number) => stamp ? new Date(stamp * 1000).toLocaleString("zh-CN", { hour12: false }) : "—";

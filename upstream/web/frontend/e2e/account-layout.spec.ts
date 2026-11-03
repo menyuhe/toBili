@@ -1,6 +1,9 @@
 import { test, expect } from "@playwright/test";
 
-test.use({ channel: process.env.PLAYWRIGHT_CHANNEL, reducedMotion: "reduce" });
+test.use({
+  channel: process.env.PLAYWRIGHT_CHANNEL,
+  contextOptions: { reducedMotion: "reduce" },
+});
 const states = [
   { name: "logged-out", logged_in: false, message: "请使用侧边栏扫码登录" },
   { name: "pending", logged_in: false, cookie_saved: true, message: "凭证已保存，正在验证登录状态" },

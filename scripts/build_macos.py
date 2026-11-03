@@ -119,14 +119,14 @@ def main() -> int:
                             'export BINGGO_PORTABLE=1\nexec "./toBili.app/Contents/MacOS/toBili"\n',
                             encoding="utf-8", newline="\n")
         portable.chmod(0o755)
-        zip_path = dist / f"toBili-Lite-preview-macOS-{arch}.zip"
+        zip_path = dist / f"toBili-macOS-{arch}.zip"
         run("ditto", "-c", "-k", "--sequesterRsrc", str(stage), str(zip_path))
         (stage / "Applications").symlink_to("/Applications")
-        dmg_path = dist / f"toBili-Lite-preview-macOS-{arch}.dmg"
+        dmg_path = dist / f"toBili-macOS-{arch}.dmg"
         run("hdiutil", "create", "-volname", "toBili", "-srcfolder", str(stage),
             "-ov", "-format", "UDZO", str(dmg_path))
         run("hdiutil", "verify", str(dmg_path))
-    checksums = dist / f"toBili-Lite-preview-macOS-{arch}-SHA256.txt"
+    checksums = dist / f"toBili-macOS-{arch}-SHA256.txt"
     lines = []
     for path in (zip_path, dmg_path):
         with path.open("rb") as stream:

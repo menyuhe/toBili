@@ -8,7 +8,7 @@ import zipfile
 
 from build_macos import ROOT, ui_reference_files, validate_config, verify_ui_reference
 
-KIT_NAME = "toBili-Lite-preview-macOS-BuildKit"
+KIT_NAME = "toBili-macOS-BuildKit"
 FILES = (
     "desktop.py", "scripts/build-windows.ps1", "scripts/desktop.spec", "upstream/web/article_emotes.json", "upstream/packaging/windows/binggo.ico", "desktop_platform.py", "desktop_instance.py", "scripts/desktop-macos.spec",
     "scripts/build-macos.command", "scripts/build_macos.py", "scripts/package_macos_source.py",

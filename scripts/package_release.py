@@ -4,7 +4,7 @@ import argparse, hashlib, shutil, tempfile, zipfile, stat
 from package_macos_source import source_files
 
 ROOT = Path(__file__).resolve().parents[1]
-TAG = "toBili-Lite-preview-20261103"
+TAG = "toBili-20261103"
 
 def frontend_files(folder):
     pending = [folder / "index.html"]

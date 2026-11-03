@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="toBili — 聚合 B 站抽奖 UP 合集，增量发现活动、本地管理参与状态，Web 控制台一键参与。" />
-  <title>toBili Lite · 开发预览</title>
+  <title>toBili</title>
   <link rel="icon" href="/favicon.svg?v=bilibili-auto-20261009" type="image/svg+xml" />
   <script>
     try {
@@ -16,8 +16,8 @@
       }
     } catch (e) {}
   </script>
-  <script type="module" crossorigin src="/assets/index-D-EXuech.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-DH-kvIh4.css">
+  <script type="module" crossorigin src="/assets/index-D2HM_xe8.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-TmllLGii.css">
 </head>
 <body>
   <div class="progress-banner" id="progress-banner" hidden>
@@ -182,8 +182,8 @@
       <div class="brand-block">
         <img class="brand-mark" src="/favicon.svg?v=bilibili-auto-20261009" alt="" width="36" height="36" decoding="async">
         <div class="brand-copy sidebar-fade">
-          <p class="brand-name">toBili Lite</p>
-          <p class="brand-tag">开发预览 · 2026.11</p>
+          <p class="brand-name">toBili</p>
+          <p class="brand-tag">B 站抽奖助手</p>
         </div>
       </div>
 
@@ -205,14 +205,6 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l2.2 6.8H21l-5.5 4 2.1 6.7L12 16.5 6.4 20.5l2.1-6.7L3 9.8h6.8L12 3z"/></svg>
           </span>
           <span class="nav-label sidebar-fade">活动</span>
-        </button>
-        <button type="button" class="nav-item" data-section="article" title="专栏整理" aria-label="专栏整理">
-          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 3h10l4 4v14H5zM14 3v5h5M8 12h8M8 16h6"/></svg></span>
-          <span class="nav-label sidebar-fade">专栏整理</span>
-        </button>
-        <button type="button" class="nav-item" data-section="tickets" title="会员购" aria-label="会员购">
-          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 5h18v5a2 2 0 0 0 0 4v5H3v-5a2 2 0 0 0 0-4zM15 5v3m0 3v2m0 3v3"/></svg></span>
-          <span class="nav-label sidebar-fade">会员购</span>
         </button>
         <button type="button" class="nav-item" data-section="settings" title="设置" aria-label="设置">
           <span class="nav-icon" aria-hidden="true">
@@ -314,8 +306,6 @@
           </div>
         </section>
 
-        <section class="view-section" id="section-article" data-title="专栏整理" data-subtitle="挑选抽奖活动，整理成自己的专栏草稿。"></section>
-        <section class="view-section" id="section-tickets" data-title="会员购" data-subtitle="选票、开售倒计时与订单提醒。支付在官方订单页完成。"></section>
         <section class="view-section" id="section-settings" data-title="设置" data-subtitle="管理参与文案、模型接口、通知与自动清理。">
           <div class="settings-stack">
             <article class="panel participate-settings">
@@ -366,24 +356,22 @@
                   </div>
                   <p class="caption field-hint" id="llm-api-key-hint"></p>
                 </div>
-                <div class="settings-field-row">
-                  <div class="settings-field">
-                    <div class="settings-field-top">
-                      <label class="field-label" for="llm-base-url-input">接口地址</label>
-                      <span class="field-tag">选填</span>
-                    </div>
-                    <p class="field-help">对应本地 <code>llm.env</code> 中的 LLM_BASE_URL，留空即不填写。</p>
-                    <input type="text" id="llm-base-url-input" class="form-input" autocomplete="off" placeholder="请输入 BASE URL" />
-                    <p class="caption field-hint" id="llm-base-url-hint"></p>
+                <div class="settings-field settings-field-full">
+                  <div class="settings-field-top">
+                    <label class="field-label" for="llm-base-url-input">接口地址</label>
+                    <span class="field-tag required">必填</span>
                   </div>
-                  <div class="settings-field">
-                    <div class="settings-field-top">
-                      <label class="field-label" for="llm-model-name-input">模型名称</label>
-                      <span class="field-tag required">必填</span>
-                    </div>
-                    <p class="field-help">文本模型标识，例如 DeepSeek-V4-Flash。</p>
-                    <input type="text" id="llm-model-name-input" class="form-input" placeholder="请输入模型名称" />
+                  <p class="field-help">服务商 API 根地址，例如 <code>https://api.deepseek.com/v1</code>。仅支持 http 或 https。</p>
+                  <input type="text" id="llm-base-url-input" class="form-input" autocomplete="off" spellcheck="false" placeholder="https://api.example.com/v1" required />
+                  <p class="caption field-hint" id="llm-base-url-hint"></p>
+                </div>
+                <div class="settings-field settings-field-full">
+                  <div class="settings-field-top">
+                    <label class="field-label" for="llm-model-name-input">模型名称</label>
+                    <span class="field-tag required">必填</span>
                   </div>
+                  <p class="field-help">文本模型标识，例如 DeepSeek-V4-Flash。</p>
+                  <input type="text" id="llm-model-name-input" class="form-input" autocomplete="off" placeholder="请输入模型名称" required />
                 </div>
               </div>
               <div class="settings-panel-foot">
@@ -646,7 +634,7 @@
   </aside>
     </div>
   </div>
-
+
 </body>
 </html>
 

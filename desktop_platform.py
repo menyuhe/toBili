@@ -12,9 +12,9 @@ def default_home(app_dir: Path, *, smoke: bool = False) -> Path:
     if sys.platform == "darwin":
         if os.environ.get("BINGGO_PORTABLE", "").strip().lower() in {"1", "true", "yes"}:
             if app_dir.name == "MacOS" and app_dir.parent.name == "Contents":
-                return app_dir.parents[2] / "toBili-Lite-Preview-data"
-            return app_dir / "toBili-Lite-Preview-data"
-        return Path.home() / "Library" / "Application Support" / "toBili-Lite-Preview"
+                return app_dir.parents[2] / "toBili-data"
+            return app_dir / "toBili-data"
+        return Path.home() / "Library" / "Application Support" / "toBili"
     return app_dir / "user-data"
 
 

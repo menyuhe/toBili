@@ -9,7 +9,7 @@ const tasks: Record<string, string> = {
   maintenance_link: '核对参与记录中', maintenance_discover: '找找对应的转发', maintenance_discover_all: '正在匹配本人转发',
   refresh_all: '找新活动呢！', refresh_source: '正在更新数据源', refresh_status: '正在核对参与状态',
   refresh_watch: '看看 UP 更新没', refresh_discovery: '新活动，搜寻中！', refresh_discovery_history: '补齐近 7 天活动',
-  login: '等你扫码登录～', ticket_run: '会员购任务执行中',
+  login: '等你扫码登录～',
 };
 
 export function accountTaskText(job: SidebarJob, loggedIn: boolean): string {

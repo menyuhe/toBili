@@ -18,7 +18,7 @@ ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 APP_DIR = Path(sys.executable).parent if getattr(sys, "frozen", False) else ROOT
 UPSTREAM = ROOT if getattr(sys, "frozen", False) else ROOT / "upstream"
 sys.path.insert(0, str(UPSTREAM))
-TITLE = "toBili Lite · 开发预览"
+TITLE = "toBili"
 SMOKE = "--smoke-test" in sys.argv
 if SMOKE:
     os.environ["BINGGO_DISABLE_BACKGROUND"] = "1"

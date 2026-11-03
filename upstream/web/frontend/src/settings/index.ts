@@ -179,6 +179,30 @@ export function getLlmFormValues() {
   };
 }
 
+/** 接口地址与模型名称均为必填；返回空字符串表示通过。 */
+export function validateLlmForm() {
+  const { base_url, model_name } = getLlmFormValues();
+  const base = (base_url || "").trim();
+  const model = (model_name || "").trim();
+  const baseInput = document.getElementById("llm-base-url-input");
+  const modelInput = document.getElementById("llm-model-name-input");
+  baseInput?.setAttribute("aria-invalid", base ? "false" : "true");
+  modelInput?.setAttribute("aria-invalid", model ? "false" : "true");
+  if (!base) {
+    baseInput?.focus();
+    return "请填写接口地址，例如 https://api.deepseek.com/v1";
+  }
+  if (!/^https?:\/\//i.test(base)) {
+    baseInput?.focus();
+    return "接口地址需以 http:// 或 https:// 开头";
+  }
+  if (!model) {
+    modelInput?.focus();
+    return "请填写模型名称";
+  }
+  return "";
+}
+
 export function renderLlmSettingsForm(settings) {
   const llm = settings?.llm || {};
   const baseInput = document.getElementById("llm-base-url-input");
@@ -199,7 +223,7 @@ export function renderLlmSettingsForm(settings) {
       : "尚未保存 API Key";
   }
   if (baseHint) {
-    baseHint.textContent = `当前接口：${llm.base_url || "（空）"}`;
+    baseHint.textContent = `当前接口：${llm.base_url || "尚未填写（必填）"}`;
   }
   if (status) {
     if (!isLoggedIn()) {
@@ -209,7 +233,7 @@ export function renderLlmSettingsForm(settings) {
     } else if (llm.configured && !llm.test_passed) {
       status.textContent = "配置已保存，请先测试连接通过后再使用项目功能";
     } else if (llm.configured) status.textContent = "LLM 已配置且测试通过";
-    else status.textContent = "请填写 API Key 与模型名称并保存，完成后才能使用项目功能";
+    else status.textContent = "请填写 API Key、接口地址与模型名称并保存，完成后才能使用项目功能";
   }
   renderOnboardingPanel();
 }
@@ -238,6 +262,11 @@ export async function refreshLlmSettings() {
 export async function saveLlmSettings() {
   if (!isLoggedIn()) {
     setInlineFeedback(llmActionFeedback, "请先扫码登录后再保存", "info", { autoHide: false });
+    return;
+  }
+  const invalid = validateLlmForm();
+  if (invalid) {
+    setInlineFeedback(llmActionFeedback, invalid, "error", { autoHide: false });
     return;
   }
   const button = document.getElementById("save-llm-settings");
@@ -270,6 +299,11 @@ export async function saveLlmSettings() {
 export async function testLlmSettings() {
   if (!isLoggedIn()) {
     setInlineFeedback(llmActionFeedback, "请先扫码登录后再测试", "info", { autoHide: false });
+    return;
+  }
+  const invalid = validateLlmForm();
+  if (invalid) {
+    setInlineFeedback(llmActionFeedback, invalid, "error", { autoHide: false });
     return;
   }
   const button = document.getElementById("test-llm-settings");
