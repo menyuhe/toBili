@@ -1,0 +1,9 @@
+#!/bin/bash
+# Configure the BaoTa generic project to run this launcher as www.
+set -euo pipefail
+cd /www/wwwroot/tobill
+set -a
+source /www/wwwroot/tobill/.env
+set +a
+export PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+exec /www/wwwroot/tobill/.venv/bin/python -m uvicorn cloud.app:create_app --factory --host 127.0.0.1 --port 18788 --workers 1 --proxy-headers --forwarded-allow-ips 127.0.0.1

@@ -1,0 +1,25 @@
+# Local data and credentials
+user-data/
+用户数据/
+**/data/
+**/cookies.txt
+**/llm.env
+**/.env
+!**/.env.example
+*.db
+*.db-wal
+*.db-shm
+*.log
+.patch-backup-*/
+# Build and dependencies
+.venv*/
+**/node_modules/
+**/__pycache__/
+.pytest_cache/
+build/
+build-output/
+dist/
+发行包/
+**/test-results/
+**/playwright-report/
+.DS_Store

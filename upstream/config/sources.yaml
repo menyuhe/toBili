@@ -1,0 +1,64 @@
+DS-2:
+  id: DS-2
+  name: 番茄薯条喵
+  mid: 3546836235193146
+  kind: cv
+  space_url: https://space.bilibili.com/3546836235193146/upload/opus
+
+DS-3:
+  id: DS-3
+  name: 你的抽奖工具人
+  mid: 100680137
+  kind: cv
+  space_url: https://space.bilibili.com/100680137/upload/opus
+
+DS-4:
+  id: DS-4
+  name: J君名
+  mid: 126038161
+  kind: cv
+  space_url: https://space.bilibili.com/126038161/upload/opus
+
+DS-6:
+  id: DS-6
+  name: 糯米是个背包
+  mid: 492426375
+  kind: opus_post
+  space_url: https://space.bilibili.com/492426375/upload/opus
+
+DS-8:
+  id: DS-8
+  name: 柚笺橘子味汽水
+  mid: 6435997
+  kind: cv
+  space_url: https://space.bilibili.com/6435997/upload/opus
+
+DS-9:
+  id: DS-9
+  name: 抽奖大王-超级无敌全
+  mid: 3546589855484661
+  kind: cv
+  space_url: https://space.bilibili.com/3546589855484661/upload/opus
+
+DS-10:
+  id: DS-10
+  name: 导演A的剪辑
+  mid: 14062306
+  kind: cv
+  space_url: https://space.bilibili.com/14062306/upload/opus
+
+DS-7:
+  id: DS-7
+  name: 大锦鲤
+  backup: true
+  mid: 226257459
+  kind: opus_post
+  space_url: https://space.bilibili.com/226257459/upload/opus
+
+DS-11:
+  id: DS-11
+  name: C0Lex
+  backup: true
+  mid: 56334559
+  kind: cv
+  space_url: https://space.bilibili.com/56334559/upload/opus

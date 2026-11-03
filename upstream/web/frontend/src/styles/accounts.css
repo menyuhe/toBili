@@ -1,0 +1,23 @@
+.account-switcher { border-bottom:1px solid var(--border-color, #ddd); padding-bottom:12px; margin-bottom:12px; }
+.account-switcher-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+#account-list { display:grid; gap:4px; max-height:240px; overflow:auto; }
+.account-choice { display:flex; align-items:center; gap:9px; width:100%; padding:8px; border:1px solid transparent; border-radius:10px; background:transparent; color:inherit; text-align:left; cursor:pointer; }
+.account-choice:hover { background:rgba(128,128,128,.08); }
+.account-entry { border:1px solid transparent; border-radius:10px; }
+.account-entry.selected { border-color:var(--accent, #dc667d); background:rgba(220,102,125,.09); }
+.account-choice > span:last-child { min-width:0; }
+.account-message-link { display:block; margin:0 8px 8px 49px; padding:2px 0; border:0; background:transparent; color:var(--accent,#245cc8); font:inherit; font-size:11px; text-align:left; cursor:pointer; }
+.account-message-link:hover { text-decoration:underline; }
+.account-message-link:focus-visible { outline:2px solid currentColor; outline-offset:3px; }
+.account-choice img,.account-initial { width:32px; height:32px; border-radius:50%; object-fit:cover; flex-shrink:0; }
+.account-initial { display:grid; place-items:center; background:rgba(128,128,128,.14); }
+.account-choice strong,.account-choice small { display:block; overflow:hidden; text-overflow:ellipsis; }
+.account-choice strong { font-size:12px; }.account-choice small { font-size:10px; opacity:.7; margin-top:3px; }
+#account-login-dialog { border:1px solid #ddd; border-radius:16px; padding:28px; text-align:center; max-width:390px; color:var(--text-primary,#222); background:var(--bg-primary,#fff); }
+#account-login-dialog::backdrop { background:rgba(0,0,0,.4); } #account-login-dialog img { display:block; margin:20px auto; }
+.message-review { border:1px solid #dfb070; border-radius:12px; padding:16px; margin:14px 0; }
+.message-review-item { padding:14px 0; border-top:1px solid rgba(128,128,128,.2); }
+.message-review-item p { white-space:pre-wrap; overflow-wrap:anywhere; }
+.message-review-item .action-row { flex-wrap:wrap; }
+
+.message-review-item .action-row input { flex:1 1 220px; min-width:180px; width:auto; }

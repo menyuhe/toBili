@@ -1,0 +1,46 @@
+services:
+  database:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tobili
+      POSTGRES_USER: tobili
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请设置数据库密码}
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tobili -d tobili"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  relay:
+    build:
+      context: ..
+      dockerfile: cloud/Dockerfile
+    restart: unless-stopped
+    environment:
+      RELAY_PUBLIC_ORIGIN: https://${RELAY_DOMAIN:?请设置服务器域名}
+      RELAY_REGISTRATION_INVITE: ${RELAY_REGISTRATION_INVITE:?请设置注册邀请码}
+      RELAY_DATABASE_URL: postgresql+psycopg://tobili:${POSTGRES_PASSWORD}@database:5432/tobili
+    depends_on:
+      database:
+        condition: service_healthy
+  https:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      RELAY_DOMAIN: ${RELAY_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - certificates:/data
+      - caddy-config:/config
+    depends_on:
+      - relay
+volumes:
+  database:
+  certificates:
+  caddy-config:
