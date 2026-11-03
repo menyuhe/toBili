@@ -44,10 +44,6 @@
 > 多账号能力面向「自己的多个账号」，请理性使用、控制频率；账号风控后果由使用者自行承担。
 > 本项目不附带账号、Cookie、密钥或活动库，也不提供任何自动化代刷服务。
 
-<div align="center">
-<img src="docs/images/overview.png?v=20261104" alt="toBili 概览：多账号、活动统计与快捷操作" width="920">
-</div>
-
 抽奖的麻烦从来不是「点一下」，而是**找**和**守**：翻十几个 UP 的合集、刷监控名单的动态、盯着开奖时间、中奖了还要回头清掉一堆历史转发。
 
 toBili 把这条链路收进一个本地窗口：合集和话题自动发现 → 活动库按开奖时间排好 → 定时任务到点自己跑 → 开奖核查确认没中再分批收尾。**同时挂几个号也不会串**——每个号独立的 Cookie、独立的活动状态、独立的调度计划。
@@ -199,6 +195,9 @@ toBili 从数据层就是按账号拆开的：侧栏的账号列表可以**同�
 ## 界面导览
 
 <table>
+<tr>
+<td colspan="2" align="center"><img src="docs/images/overview.png?v=20261104" width="820" alt="概览：多账号、活动统计与快捷操作"><br><sub><b>概览</b>：当前账号资料、活动统计与快捷操作；左侧一列就是所有在挂的号</sub></td>
+</tr>
 <tr>
 <td width="50%"><img src="docs/images/activities.png?v=20261104" width="430" alt="活动页"><br><sub><b>活动库</b>：类型 / 状态 / 热度筛选，即将开奖，行内参与</sub></td>
 <td width="50%"><img src="docs/images/sources.png?v=20261104" width="430" alt="数据源"><br><sub><b>数据源</b>：话题、合集与监控名单三路发现</sub></td>
