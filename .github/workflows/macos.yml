@@ -1,0 +1,37 @@
+name: macOS
+on:
+  workflow_dispatch:
+  push:
+    paths: ["core/**", "ui/**", "tools/build_macos.py", "tools/smoke_macos.py", "pyproject.toml", "uv.lock", ".github/workflows/macos.yml"]
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: uv sync --locked
+      - run: npm ci && npm run typecheck && npm run build
+        working-directory: ui
+      - run: uv run pytest -q
+      - run: uv run python tools/build_macos.py
+      - run: uv run python tools/smoke_macos.py
+        env:
+          PYTHONPATH: core/src
+      - uses: actions/upload-artifact@v4
+        with:
+          name: toBili-${{ matrix.runner }}
+          path: dist/toBili-macOS-*.zip
+          retention-days: 14

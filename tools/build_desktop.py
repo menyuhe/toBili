@@ -41,6 +41,11 @@ def make_icon(target: Path) -> Path:
 
 
 def main() -> int:
+    if sys.platform == "darwin":
+        from build_macos import main as build_mac
+
+        build_mac()
+        return 0
     bundle = ROOT / "ui" / "dist"
     if not (bundle / "index.html").is_file():
         print("找不到 ui/dist —— 先在 ui/ 里跑一次 npm run build。", file=sys.stderr)

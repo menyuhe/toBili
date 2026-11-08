@@ -65,7 +65,11 @@ def run(
     profile = data / "webview"
     profile.mkdir(parents=True, exist_ok=True)
     bundle = bundle_dir()
-    icon = next(iter(bundle.glob("*.ico")), None) if bundle else None
+    icon = (
+        (bundle / "icon.png")
+        if sys.platform == "darwin" and bundle
+        else (next(iter(bundle.glob("*.ico")), None) if bundle else None)
+    )
     if sys.platform == "win32":
         import ctypes
 

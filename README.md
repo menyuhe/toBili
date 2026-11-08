@@ -2,16 +2,17 @@
   <img src="ui/public/icon.png" width="76" alt="toBili logo" />
   <h1>toBili</h1>
   <p><strong>发现奖品，安排参与，核验后收尾。</strong></p>
-  <p>本机多账号抽奖管理工具 · Windows 桌面窗口 · 开源核心</p>
+  <p>本机多账号抽奖管理工具 · Windows / macOS 桌面窗口 · 开源核心</p>
   <p>
-    <a href="https://github.com/menyuhe/toBili/releases/latest">下载 Windows 版</a> ·
+    <a href="https://github.com/menyuhe/toBili/releases/latest">下载桌面版</a> ·
+    <a href="docs/public/MAC.md">Mac 安装与构建</a> ·
     <a href="docs/public/GUIDE.md">使用指南</a> ·
     <a href="https://tobili.4wdo.cn/public/">公开奖品目录</a> ·
     <a href="https://github.com/menyuhe/toBili/issues">反馈问题</a>
   </p>
   <img alt="License AGPL-3.0-or-later" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-2063AE?style=flat-square" />
   <img alt="Python 3.12+" src="https://img.shields.io/badge/Python-3.12%2B-176B68?style=flat-square" />
-  <img alt="Windows desktop" src="https://img.shields.io/badge/desktop-Windows-2063AE?style=flat-square" />
+  <img alt="Windows and macOS desktop" src="https://img.shields.io/badge/desktop-Windows%20%7C%20macOS-2063AE?style=flat-square" />
 </div>
 
 <br>
@@ -55,7 +56,7 @@ Windows 需要 WebView2 Runtime。数据库保存在程序同级 `data/`，升�
 
 ## 数据去哪里
 
-- **本机保存**：账号凭据、参与历史、待参与队列、消息标记和定时设置。Windows 凭据使用当前系统用户的 DPAPI 加密。
+- **本机保存**：账号凭据、参与历史、待参与队列、消息标记和定时设置。Windows 凭据使用当前系统用户的 DPAPI 加密，Mac 使用登录钥匙串保管加密密钥。
 - **公开目录只读**：匿名获取奖品、原动态、公开 UP 信息和开奖时间；普通版不上传账号、参与记录或私信。目录不可用时，其他来源仍可使用。
 - **模型按需接入**：配置自己的兼容接口后，待识别的正文或图片会发送给该模型服务。无依据的开奖时间保留为空，手动修订不会被普通扫描覆盖。
 - **写入按账号协调**：同一账号在本机串行执行；未知结果不会盲目重发。平台限流、登录失效与接口变化仍可能中断任务，错误可在运行记录中查看。
@@ -79,9 +80,9 @@ cd ..
 uv run tobili serve --port 8848
 ```
 
-浏览器打开 `http://127.0.0.1:8848`。桌面 EXE 当前提供 Windows 版；不要把历史版本的 macOS 安装包当成本次重写版。
+浏览器打开 `http://127.0.0.1:8848`。macOS 的安装、数据位置与原生构建步骤见 [Mac 使用说明](docs/public/MAC.md)。两平台共用界面和业务代码。
 
-[构建与验证](docs/public/GUIDE.md#验证与参与开发) · [项目结构](PROJECT.md) · [贡献约定](CONTRIBUTING.md)
+[构建与验证](docs/public/GUIDE.md#验证与参与开发) · [项目结构](PROJECT.md)
 
 ## 项目说明
 

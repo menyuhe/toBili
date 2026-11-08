@@ -3,13 +3,14 @@
 格式很土但足够清楚：`4 字节魔数 + 载荷`。四个魔数位区分「系统密钥加密」与
 「平台无加密能力时降级」两种状态，读取时两种都认，写入时优先加密。
 
-降级路径是刻意保留的：在 Linux/macOS 上没有 DPAPI，与其假装安全，不如写明文
-但把 `secure` 标成 False，并让上层在界面上明确提示。**看得见的弱，好过看不见的假。**
+Windows 使用 DPAPI；macOS 使用登录钥匙串保管加密密钥，访问失败时停止读写。
+没有配置系统加密能力的其他平台使用明文格式，并将 `secure` 标为 False。
 """
 
 from __future__ import annotations
 
 import os
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Final
@@ -26,9 +27,16 @@ class VaultError(RuntimeError):
     """凭据损坏或无法解密。这种情况不应静默降级，要让人知道要重新登录。"""
 
 
-def _default_codec() -> tuple[Callable[[bytes], bytes] | None, Callable[[bytes], bytes] | None]:
+def _default_codec(
+    root: Path,
+) -> tuple[Callable[[bytes], bytes] | None, Callable[[bytes], bytes] | None]:
     if dpapi.available():
         return dpapi.seal, dpapi.unseal
+    if sys.platform == "darwin":
+        from .keychain import KeychainCodec
+
+        codec = KeychainCodec(root)
+        return codec.seal, codec.unseal
     return None, None
 
 
@@ -51,7 +59,7 @@ class FileVault:
         if plain:
             seal, unseal = None, None
         elif seal is None and unseal is None:
-            seal, unseal = _default_codec()
+            seal, unseal = _default_codec(self._root)
         self._seal = seal
         self._unseal = unseal
         self._tight = True

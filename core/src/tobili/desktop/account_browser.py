@@ -76,8 +76,8 @@ def command(home, owner, url, ticket):
 
 def launch(home, owner, url):
     checked_url(url)
-    if sys.platform != "win32":
-        raise ValueError("当前版本的账号专属窗口需要 Windows WebView2")
+    if sys.platform not in ("win32", "darwin"):
+        raise ValueError("账号专属窗口支持 Windows 和 macOS")
     key = (str(Path(home).resolve()), owner)
     with _guard:
         prior = _sessions.get(key)
@@ -132,7 +132,7 @@ def install_cookies(manager, pairs):
 def run(home, owner, url, ticket):
     checked_url(url)
     status_path(home, ticket)
-    if sys.platform != "win32":
+    if sys.platform not in ("win32", "darwin"):
         raise ValueError("需要 Windows WebView2")
     import webview
 
@@ -158,6 +158,10 @@ def run(home, owner, url, ticket):
     finally:
         if box:
             box.close()
+    if sys.platform == "darwin":
+        from .mac_browser import run_window
+
+        return run_window(home, owner, url, ticket, title, pairs)
     # Each account owns a separate process and private profile, even when two
     # windows are open concurrently. No localhost origin or js_api in this window.
     profile_path = Path(home) / "account-browser" / str(owner) / ticket

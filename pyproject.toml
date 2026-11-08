@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "toBili —— B 站抽奖活动管理工具（工作区根）"
 requires-python = ">=3.12"
 dependencies = [
-    "pywebview>=5.0 ; sys_platform == 'win32'",
+    "pywebview>=6.2 ; sys_platform == 'win32' or sys_platform == 'darwin'",
     "tobili-core",
 ]
 

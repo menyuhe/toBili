@@ -12,7 +12,9 @@ dependencies = [
     "nh3>=0.2.18",
     "pillow>=10.4",
     # 桌面壳的托盘。只在 Windows 上装：Linux 上它要 X11，CI 里没必要拉进来。
-    "pystray>=0.19; sys_platform == 'win32'",
+    "pystray>=0.19; sys_platform == 'win32' or sys_platform == 'darwin'",
+    "cryptography>=43; sys_platform == 'darwin'",
+    "pyobjc-framework-Security>=10; sys_platform == 'darwin'",
 ]
 
 [project.optional-dependencies]

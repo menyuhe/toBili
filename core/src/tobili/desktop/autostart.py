@@ -29,7 +29,14 @@ def _command(exe: Path | None = None) -> str:
     return f'"{sys.executable}" -m tobili.desktop --tray'
 
 
-def is_enabled(name: str = _KEY) -> bool:
+def is_enabled(name: str | None = None) -> bool:
+    from ..config import edition_name
+
+    name = name or edition_name()
+    if sys.platform == "darwin":
+        from .mac_autostart import enabled
+
+        return enabled(name)
     if sys.platform != "win32":
         return False
     import winreg
@@ -42,8 +49,15 @@ def is_enabled(name: str = _KEY) -> bool:
     return bool(value)
 
 
-def set_enabled(on: bool, *, name: str = _KEY, exe: Path | None = None) -> None:
+def set_enabled(on: bool, *, name: str | None = None, exe: Path | None = None) -> None:
     """开或关。`name` 可换，方便测试用一次性键名，不去动用户真正的启动项。"""
+    from ..config import edition_name
+
+    name = name or edition_name()
+    if sys.platform == "darwin":
+        from .mac_autostart import configure
+
+        return configure(on, name, exe)
     if sys.platform != "win32":
         raise OSError("开机自启只在 Windows 上实现")
     import winreg

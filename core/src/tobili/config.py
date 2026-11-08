@@ -19,10 +19,18 @@ def is_frozen() -> bool:
     return bool(getattr(sys, "frozen", False))
 
 
+def edition_name() -> str:
+    from importlib.util import find_spec
+
+    return APP + (" Pro" if find_spec("tobili.private_pack") else "")
+
+
 def default_home() -> Path:
     override = os.environ.get(_ENV_HOME, "").strip()
     if override:
         return Path(override).expanduser()
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / edition_name()
     if is_frozen():
         # Never silently adopt a parent folder's database (possibly another edition).
         # Developer data can still be selected explicitly with --home / TOBILI_HOME.
