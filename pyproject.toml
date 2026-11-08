@@ -41,7 +41,7 @@ ignore = ["E501", "RUF001", "RUF002", "RUF003"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["core/src"]
+pythonpath = ["core/src", "."]
 addopts = "-q --strict-markers"
 markers = [
     "network: 需要真实网络，默认不跑",
