@@ -1,0 +1,66 @@
+[project]
+name = "tobili-workspace"
+version = "0.1.0"
+description = "toBili —— B 站抽奖活动管理工具（工作区根）"
+requires-python = ">=3.12"
+dependencies = [
+    "pywebview>=5.0 ; sys_platform == 'win32'",
+    "tobili-core",
+]
+
+[dependency-groups]
+dev = [
+    "pyinstaller",
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "pytest-cov",
+    "respx>=0.21",
+    "ruff>=0.6",
+]
+
+[tool.uv.workspace]
+members = ["core"]
+
+[tool.uv.sources]
+tobili-core = { workspace = true }
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["core/src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+# RUF001-003 是"全角标点"告警。中文文案里用全角标点是正确的，
+# 关掉它，否则每句话都会被报一次。
+ignore = ["E501", "RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI 的依赖注入就是靠默认参数里的调用，这不是可变默认值陷阱。
+"core/src/tobili/api/routes/*.py" = ["B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["core/src"]
+addopts = "-q --strict-markers"
+markers = [
+    "network: 需要真实网络，默认不跑",
+    "windows: 仅 Windows 可跑",
+]
+
+[tool.coverage.run]
+source = ["tobili"]
+# 分支覆盖没开：这套代码的"分支"大多是错误处理，为了覆盖率去构造异常的分支
+# 只会把测试写成仪式。行覆盖 + 明确的门槛够用。
+branch = false
+
+[tool.coverage.report]
+# 当前实测 71%。门槛留 3 个点余量，作用只有一个：拦住"新代码一行不测"。
+# 它不是为了逼人凑数字 —— 真要抬，先补测试再抬门槛。
+fail_under = 68
+skip_covered = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]

@@ -1,0 +1,11 @@
+# 统一换行，避免 Windows 上提交后 diff 满屏变化。
+* text=auto eol=lf
+
+# 批处理必须 CRLF，否则某些环境下解析出错。
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+*.png binary
+*.ico binary
+*.jpg binary

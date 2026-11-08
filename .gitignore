@@ -1,27 +1,52 @@
-# Local data and credentials
-user-data/
-用户数据/
-**/data/
-**/cookies.txt
-**/llm.env
-**/.env
-!**/.env.example
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# 构建产物
+build/
+dist/
+*.spec
+!desktop/packaging/*.spec
+
+# 前端
+node_modules/
+.vite/
+ui/dist/
+services/catalog-web/dist/
+
+# 运行数据（绝不入库：含凭据与本地状态）
+# 注意别写成裸的 vault/ —— 那会连 core/src/tobili/adapters/vault/ 一起忽略掉，
+# 源码会静默地不进版本库。数据目录已经在 data/ 下面，用不着这条。
+data/
 *.db
 *.db-wal
 *.db-shm
+*.sqlite3
+logs/
 *.log
-.patch-backup-*/
-# Build and dependencies
-.venv*/
-**/node_modules/
-**/__pycache__/
-.pytest_cache/
-build/
-build-output/
-dist/
-# 例外：随源码一起分发的前端构建产物，保证 clone 后无需 npm build 即可运行
-!upstream/web/static/dist/
-发行包/
-**/test-results/
-**/playwright-report/
+
+# 凭据类，双保险
+cookies.txt
+*.env
+.env*
+!*.env.example
+notifications.json
+cloud_session.json
+ticket_contacts.json
+
+# 编辑器
+.idea/
+.vscode/
 .DS_Store
+Thumbs.db
+
+# 本地临时文件（二维码、调试产物）
+.workbuddy/
+.pytest-tmp/

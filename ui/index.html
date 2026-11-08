@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>toBili · 抽奖活动管理</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <script>
+      try { document.documentElement.classList.toggle('light', localStorage.getItem('tobili.theme') !== 'dark') }
+      catch { document.documentElement.classList.add('light') }
+    </script>
+    <style>
+      /* 首屏没脚本前也别闪白。深色是默认，浅色由 .light 覆盖。 */
+      html, body { background: #0a0c10; margin: 0; }
+      html.light, html.light body { background: #f4f6f9; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <pre id="boot-err" style="display:none"></pre>
+    <script>
+      // 启动期的异常没有任何界面可以承载，而它恰恰是最难查的一类。
+      // 先攒着，渲染出来，截图和 dump-dom 都能看见。
+      window.__bootErrors = []
+      const push = (value) => {
+        window.__bootErrors.push(String((value && value.message) || value))
+        const node = document.getElementById('boot-err')
+        if (node) node.textContent = JSON.stringify(window.__bootErrors)
+      }
+      window.addEventListener('error', (event) => push(event.error || event.message))
+      window.addEventListener('unhandledrejection', (event) => push(event.reason))
+    </script>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,35 @@
+[project]
+name = "tobili-core"
+version = "0.1.0"
+description = "toBili 核心：领域模型、适配器与用例"
+requires-python = ">=3.12"
+license = { text = "AGPL-3.0-or-later" }
+dependencies = [
+    "httpx>=0.27",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "qrcode>=7.4",
+    "nh3>=0.2.18",
+    "pillow>=10.4",
+    # 桌面壳的托盘。只在 Windows 上装：Linux 上它要 X11，CI 里没必要拉进来。
+    "pystray>=0.19; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "respx>=0.21",
+    "ruff>=0.6",
+]
+
+[project.scripts]
+tobili = "tobili.cli:main"
+tobili-desktop = "tobili.desktop:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tobili"]

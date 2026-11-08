@@ -1,0 +1,63 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: 安装依赖
+        run: uv sync
+
+      - name: 静态检查
+        run: uv run ruff check .
+
+      - name: 格式检查
+        # 这条一直开着，但本地只跑 `ruff check` 看不见它 —— 2026-11 之前它其实红了
+        # 42 个文件。lint 和 format 是两件事，缺一条就等于没检查。
+        run: uv run ruff format --check .
+
+      - name: 单元与契约测试
+        # 覆盖率门槛在 pyproject 的 [tool.coverage.report] 里（实测 71%、门槛 68）。
+        run: uv run pytest --cov
+
+      - name: 独立实现自检
+        # 不带 --baseline 时只跑依赖与结构检查，用于防止有人把外部包名带进来。
+        run: uv run python tools/similarity_check.py
+
+      - name: 公开源码边界
+        run: uv run python tools/release_check.py
+
+  ui:
+    # 前端单独一个 job：挂了要一眼看出是前端挂了，而不是和 Python 混成一个红。
+    # 以前 CI 只跑 Python，`npm run build` 失败的提交照样全绿。
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: 安装依赖
+        working-directory: ui
+        run: npm ci
+
+      - name: 类型检查
+        working-directory: ui
+        run: npm run typecheck
+
+      - name: 构建
+        working-directory: ui
+        run: npm run build

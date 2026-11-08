@@ -1,0 +1,388 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 主题用 CSS 变量而不是两套类名：切换主题只改一个属性，
+   组件里不需要写 `dark:` 前缀，也就不会出现"漏了一处"的半深半浅。
+   颜色值刻意选了低饱和的冷灰 —— 这工具是用来盯着看清单的，
+   背景越安静，勾选框和理由文字越显眼。 */
+:root {
+  color-scheme: dark;
+  --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:20px;--space-6:24px;
+  --radius-control:8px;--radius-panel:12px;--radius-modal:16px;--radius-pill:999px;
+  --text-body:15px;--text-control:14px;--text-meta:13px;--text-heading:17px;
+  --control-height:36px;--icon-size:32px;--body-leading:1.6;
+  --bg: #0c111b;
+  --surface: #151d2b;
+  --surface-2: #1c283a;
+  --surface-3: #253248;
+  --line: #35445b;
+  --line-soft: #29364a;
+  --text: #e8edf4;
+  --text-dim: #bcc5d3;
+  --muted: #a0afc5;
+  --accent: #78d6ca;
+  --on-accent: #102629;
+  --discover: #8cbcff;
+  --editor: #d8a8e8;
+  --accent-soft: rgba(120, 214, 202, 0.12);
+  --ok: #3dd68c;
+  --ok-soft: rgba(61, 214, 140, 0.12);
+  --warn: #f5a524;
+  --warn-soft: rgba(245, 165, 36, 0.12);
+  --danger: #ff839f;
+  --danger-soft: rgba(244, 69, 107, 0.12);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+}
+
+html.light {
+  color-scheme: light;
+  --bg: #e9eff8;
+  --surface: #ffffff;
+  --surface-2: #e7eef9;
+  --surface-3: #dce7f5;
+  --line: #b6c7df;
+  --line-soft: #d5e0ef;
+  --text: #101720;
+  --text-dim: #3c4756;
+  --muted: #586678;
+  --accent: #176762;
+  --on-accent: #fff;
+  --discover: #245fa5;
+  --editor: #7c448e;
+  --accent-soft: rgba(23, 103, 98, 0.1);
+  --ok: #087c54;
+  --ok-soft: rgba(18, 166, 114, 0.1);
+  --warn: #805008;
+  --warn-soft: rgba(184, 115, 9, 0.1);
+  --danger: #bc2145;
+  --danger-soft: rgba(217, 43, 82, 0.09);
+  --shadow: 0 1px 2px rgba(16, 23, 32, 0.04), 0 10px 30px -18px rgba(16, 23, 32, 0.25);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* preflight 被关掉了，原生 button / input 会带着 UA 的浅灰底与 outset 边框。
+   在深色界面里那就是一块块白斑。这里一次性清掉外观，具体样式由各自的类决定。 */
+button,
+input,
+textarea {
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  color: inherit;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  font-size: var(--text-body);
+  line-height: var(--body-leading);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+/* 滚动条细一点。默认的宽条在深色里像一道墙。 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--line);
+}
+
+@layer components {
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-panel);
+    box-shadow: none;
+  }
+
+  .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    padding: 0 10px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+    color: var(--text-dim);
+  }
+  .chip-ok {
+    color: var(--ok);
+    background: var(--ok-soft);
+    border-color: transparent;
+  }
+  .chip-warn {
+    color: var(--warn);
+    background: var(--warn-soft);
+    border-color: transparent;
+  }
+  .chip-danger {
+    color: var(--danger);
+    background: var(--danger-soft);
+    border-color: transparent;
+  }
+  .chip-accent {
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-color: transparent;
+  }
+
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: currentColor;
+    flex: none;
+  }
+
+  .muted {
+    color: var(--muted);
+  }
+  .dim {
+    color: var(--text-dim);
+  }
+
+  .kbd {
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .row-hover:hover {
+    background: var(--surface-2);
+  }
+
+  /* 数据表：一屏能多看几行。列表页的信息密度比留白重要，
+     行高从默认的 12px 内边距压到 7px，字号也降半级。 */
+  .dense {
+    table-layout: fixed;
+    border-collapse: collapse;
+  }
+  .dense th {
+    text-align: center;
+    font-weight: 500;
+    font-size: var(--text-meta);
+    color: var(--muted);
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--line-soft);
+    background: var(--surface-2);
+    white-space: nowrap;
+  }
+  .dense td {
+    padding: 13px 14px;
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: middle;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .dense tr:last-child td {
+    border-bottom: none;
+  }
+
+  /* 输入框。原本只写在设置页里，别的页面用同一套 class 时没有样式 ——
+     深色主题下会露出浏览器默认的白底，看起来像一块没加载完的空洞。 */
+  .ipt {
+    width: 100%;
+    height: 32px;
+    padding: 0 10px;
+    border-radius: var(--radius-control);
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+    color: var(--text);
+    font-size: 13.5px;
+    outline: none;
+  }
+  .ipt:focus {
+    border-color: var(--accent);
+  }
+
+  /* 复选框自己画。`accent-color` 只改颜色，控件本身的底色仍由系统决定 ——
+     深色主题下会露出一块白方块，看起来像没加载完。自绘之后两边主题都一致。 */
+  input[type='checkbox'] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 15px;
+    height: 15px;
+    flex: none;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--surface-2);
+    cursor: pointer;
+    position: relative;
+    margin: 0;
+  }
+  input[type='checkbox']:hover {
+    border-color: var(--accent);
+  }
+  input[type='checkbox']:checked {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  input[type='checkbox']:checked::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 4px;
+    height: 8px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+}
+
+/* 让进度条和骨架屏有呼吸感，而不是死板地闪 */
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.live {
+  animation: pulse-soft 2s ease-in-out infinite;
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.enter {
+  animation: slide-in 0.22s ease-out both;
+}
+
+.event-ribbon{flex:none;background:var(--surface);color:var(--text);padding:8px 24px;border-top:1px solid var(--line);font-size:13px;max-height:180px;overflow:auto}.event-ribbon summary{cursor:pointer;color:var(--muted)}
+
+/* Shared controls also cover private plugin views. */
+@layer base {
+  body {margin:0}
+  h1,h2,h3,p {margin:0}
+  h2 {font-size:16px;font-weight:600;line-height:1.5}
+  button {min-height:var(--control-height);padding:6px 12px;border:1px solid var(--line);border-radius:var(--radius-control);background:var(--surface-3);color:var(--text);font-size:var(--text-control);line-height:1.4;cursor:pointer;white-space:nowrap}
+  button:hover:not(:disabled) {border-color:var(--accent);color:var(--accent)}
+  button:disabled {cursor:not-allowed}
+  button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible,a:focus-visible {outline:2px solid var(--accent);outline-offset:3px}
+  select {color:var(--text);background:var(--surface-2);font:inherit}
+  summary {cursor:pointer;font-size:14px}
+}
+.toolbar {display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-2)}
+.field {display:flex;flex-direction:column;gap:7px;min-width:0;font-size:13px;color:var(--text-dim)}
+.field .ipt {width:100%;min-height:34px}
+button.primary {background:var(--accent);color:var(--bg);border-color:var(--accent);font-weight:600}
+html.light button.primary {color:#fff}
+button.primary:hover:not(:disabled) {color:var(--bg);filter:brightness(1.08)}
+html.light button.primary:hover:not(:disabled) {color:#fff}
+button.danger,.warning {color:var(--warn)}
+button.danger:hover:not(:disabled) {color:var(--danger);border-color:var(--danger)}
+.empty-state {padding:40px 20px;color:var(--muted);text-align:center;font-size:14px}
+.app-content > * {width:100%;max-width:1440px;margin-inline:auto}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+@media(max-width:900px){.app-sidebar{width:168px!important}.app-content{padding:16px!important}.app-header{padding-inline:16px!important}}
+
+.modal {max-width:min(720px,calc(100vw - 40px));width:100%;max-height:85dvh;padding:0;background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:var(--radius-panel);box-shadow:var(--shadow)}
+.modal::backdrop{background:rgb(0 0 0 / .55)}
+.modal-body{padding:20px;overflow:auto}
+.modal header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 20px;border-bottom:1px solid var(--line)}
+
+/* Application chrome: readable hierarchy, shared type colors, centered headers. */
+html {font-size:17px}
+th {text-align:center!important;vertical-align:middle;line-height:1.5}
+th>div {justify-content:center}
+.ipt {min-height:38px;line-height:1.5}
+.kind-badge {display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;flex-shrink:0;min-width:54px;padding:4px 11px;border-radius:var(--radius-control);font-size:13px;font-weight:500;line-height:1.5;border:1px solid color-mix(in srgb,var(--kind-color,var(--muted)) 35%,transparent);color:var(--kind-color,var(--text-dim));background:color-mix(in srgb,var(--kind-color,var(--muted)) 13%,var(--surface))}
+.kind-share{--kind-color:var(--accent)}
+.kind-comment{--kind-color:var(--discover)}
+.kind-reserve{--kind-color:var(--warn)}
+.kind-check_in{--kind-color:var(--editor)}
+.kind-unknown{--kind-color:var(--muted)}
+.kind-cell{text-align:center}
+.type-tabs{display:flex;gap:6px;padding:4px;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius-panel)}
+.type-tabs button{--tab-color:var(--discover);background:transparent;border-color:transparent;color:var(--text-dim);padding:7px 14px}
+.type-tabs button.collection-tab{--tab-color:var(--editor)}
+.type-tabs button.selected{color:var(--tab-color);background:color-mix(in srgb,var(--tab-color) 16%,var(--surface));border-color:color-mix(in srgb,var(--tab-color) 50%,var(--line))}
+.type-tabs button span{margin-left:6px;font-variant-numeric:tabular-nums}
+.source-row-topic{box-shadow:inset 3px 0 var(--discover);background:color-mix(in srgb,var(--discover) 4%,var(--surface))}
+.source-row-collection{box-shadow:inset 3px 0 var(--editor);background:color-mix(in srgb,var(--editor) 5%,var(--surface))}
+.plain-filter{background:transparent;border-color:transparent}
+@media(max-width:1100px){.source-filter{flex-wrap:wrap}.source-filter .ipt{flex:1;min-width:140px}}
+
+:root{--discover-soft:#203754;--editor-soft:#32263f;--log-bg:#192d45}
+html.light{--discover-soft:#dceaff;--editor-soft:#efe1f7;--log-bg:#dae8fc}
+.app-content>.panel,.panel{border-color:var(--line)}
+.panel-head{background:var(--surface-2);border-bottom:1px solid var(--line);border-radius:var(--radius-panel) var(--radius-panel) 0 0}
+.task-launch{border-radius:var(--radius-pill)!important;background:var(--discover-soft)!important;border:1px solid var(--discover)!important;color:var(--discover)!important;min-height:30px!important;height:30px;padding:3px 11px!important;font-size:var(--text-meta);font-weight:500}
+.event-ribbon{background:var(--log-bg);border-top:3px solid var(--discover);box-shadow:0 -5px 20px #142b4b14;padding:10px 24px;max-height:210px}
+.event-ribbon .log-issue{color:var(--warn);white-space:pre-wrap;overflow-wrap:anywhere}.log-actions{padding:8px 0}.log-actions a{border:1px solid var(--line);border-radius:var(--radius-control);padding:4px 10px;color:var(--discover);background:var(--surface)}
+.log-problems{display:inline-block;margin-left:14px;padding:3px 9px;border:1px solid var(--line);border-radius:6px;color:var(--warn);background:var(--surface);white-space:nowrap}
+.event-ribbon summary{color:var(--text);font-weight:500;line-height:1.8;min-height:28px}
+.event-ribbon>div{padding:6px 10px;border-top:1px solid var(--line);margin-top:3px}
+.log-label{font-weight:700;color:var(--discover)}
+.next-task{display:inline-flex;align-items:center;float:right;max-width:45%;padding:2px 12px;margin-left:18px;background:var(--surface);border:1px solid var(--discover);border-radius:var(--radius-pill);font-size:12px;color:var(--discover)}
+.workspace-tabs{display:flex;gap:var(--space-2);padding:0 var(--space-6);background:var(--surface);border-bottom:1px solid var(--line);flex:none;overflow-x:auto}
+.workspace-tabs a{display:inline-flex;align-items:center;gap:var(--space-2);padding:12px 16px;white-space:nowrap;font-size:var(--text-control);line-height:1.5;color:var(--text-dim);border-bottom:2px solid transparent;border-radius:var(--radius-panel) var(--radius-panel) 0 0}
+.workspace-tabs a.selected{background:color-mix(in srgb,var(--section-color,var(--discover)) 14%,var(--surface));color:var(--section-color,var(--discover));border-bottom-color:var(--section-color,var(--discover));font-weight:600}
+.workspace-tabs a.risk-tab{color:var(--danger)}
+html.light .kind-share{background:#d6f1e9;color:#145f50}html.light .kind-comment{background:#dce9ff;color:#24549a}html.light .kind-reserve{background:#ffebc2;color:#805008}html.light .kind-check_in{background:#edddf8;color:#743b89}
+
+/* Interface links use color and focus, leaving rich document formatting to the editor. */
+a {text-decoration:none}
+.workspace-tabs .tab-count{display:inline-flex;align-items:center;justify-content:center;min-width:23px;padding:1px 6px;margin-left:7px;border-radius:var(--radius-control);background:var(--accent-soft);color:var(--accent);font-size:12px;line-height:20px;font-variant-numeric:tabular-nums}
+
+/* Shared controls: geometry lives here; semantic colors are supplied by variables. */
+.ui-icon{display:inline-block;vertical-align:middle;flex:none}
+.icon-button{--control-tone:var(--muted);display:inline-grid;place-items:center;flex:none;vertical-align:middle;width:var(--icon-size);height:var(--icon-size);min-height:var(--icon-size);padding:0;border:1px solid var(--line);border-radius:var(--radius-control);color:var(--control-tone);background:var(--surface)}
+.icon-button.tone-warn{--control-tone:var(--warn)}.icon-button.tone-danger{--control-tone:var(--danger)}
+.icon-button-small{--icon-size:28px;border-color:transparent;background:transparent}
+.icon-button:hover:not(:disabled){color:var(--control-tone);background:color-mix(in srgb,var(--control-tone) 12%,var(--surface));border-color:var(--control-tone)}
+.row-controls{display:flex;justify-content:center;align-items:center;gap:var(--space-2);flex-wrap:nowrap}.row-controls>button{min-height:32px;height:32px;padding-block:4px}.row-controls>button.icon-button{padding:0}
+.app-modal{position:fixed;inset:0;margin:auto;padding:0;width:min(680px,calc(100vw - 40px));max-height:86dvh;background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:var(--radius-modal);box-shadow:0 24px 80px #07152955;overflow:hidden}
+.app-modal[open]{display:flex;flex-direction:column}.app-modal::backdrop{background:#08132285}.app-modal.modal-wide{width:min(920px,calc(100vw - 40px))}
+.app-modal>header{display:flex;align-items:center;justify-content:space-between;gap:var(--space-4);padding:var(--space-4) var(--space-6);border-bottom:1px solid var(--line);background:var(--surface-2);flex:none}.app-modal>header h2{font-size:var(--text-heading);font-weight:650;line-height:1.5}.app-modal>.modal-body{overflow:auto;padding:var(--space-6);min-height:0}
+
+/* Disabled controls retain legible neutral colors in both themes. */
+button:disabled,button.primary:disabled,button.btn-primary:disabled,html.light button.primary:disabled{opacity:1!important;color:var(--muted)!important;background:var(--surface-2)!important;border-color:var(--line)!important;box-shadow:none;filter:none}
+.compact-options{display:flex;flex-wrap:wrap;gap:8px 18px}.compact-options label{display:inline-flex;align-items:center;gap:7px;min-height:28px;font-size:var(--text-meta);cursor:pointer}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+
+/* Deadline priority is shared across prize lists. Expired / unknown dates have no urgency tint. */
+.deadline-mark{display:inline-block;padding:5px 7px;border-radius:var(--radius-control);white-space:nowrap}
+.deadline-urgent{background:#49303b;color:#ffb2c1}.deadline-soon{background:#403724;color:#ffd891}
+html.light .deadline-urgent{background:#ffe1e8;color:#972342}html.light .deadline-soon{background:#fff0ca;color:#77510a}
