@@ -46,6 +46,8 @@ def test_default_desktop_avoids_other_editions_port(tmp_path, monkeypatch):
 def test_frozen_home_never_adopts_parent_database(tmp_path, monkeypatch):
     from tobili import config
 
+    monkeypatch.setattr(sys, "platform", "win32")
+
     parent_data = tmp_path / "data"
     parent_data.mkdir()
     (parent_data / "tobili.db").write_text("unrelated account data")

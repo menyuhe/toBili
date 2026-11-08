@@ -16,7 +16,7 @@ def test_native_window_keeps_profile_across_restarts(tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, "webview", fake)
     bundle = tmp_path / "bundle"
     bundle.mkdir()
-    icon = bundle / "toBili.ico"
+    icon = bundle / ("icon.png" if sys.platform == "darwin" else "toBili.ico")
     Image.new("RGBA", (32, 32), "pink").save(icon)
     monkeypatch.setattr("tobili.desktop.shell.bundle_dir", lambda: bundle)
     shell = SimpleNamespace(paths=SimpleNamespace(home=tmp_path), stop=lambda: stopped.append(True))
