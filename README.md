@@ -46,7 +46,7 @@
 
 ## 三步开始
 
-1. 从 [Releases](https://github.com/menyuhe/toBili/releases/latest) 下载 `toBili.exe`，放进一个独立、有写入权限的文件夹。
+1. 从 [Releases](https://github.com/menyuhe/toBili/releases/latest) 下载桌面版：Windows 用 `toBili.exe`；Mac 按芯片选择 ZIP，解压后放进「应用程序」（[安装说明](docs/public/MAC.md)）。
 2. 双击启动并扫码。右上角可添加自己的其他账号；新账号默认不开启自动任务。
 3. 在 **发现与参与 → 订阅源** 添加来源，或读取公开目录；挑选奖品加入待参与，再按需配置定时任务。
 
