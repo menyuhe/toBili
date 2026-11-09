@@ -18,8 +18,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from ..container import Container
 from .. import __version__
+from ..container import Container
 from .routes import (
     accounts,
     auth,

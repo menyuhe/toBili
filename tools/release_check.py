@@ -76,6 +76,11 @@ LOGOS = {
     "docs/public/media/schedule.png",
     "docs/public/media/accounts.png",
     "docs/public/media/workflow.gif",
+    "docs/public/media/overview.png",
+    "docs/public/media/sources.png",
+    "docs/public/media/dark.png",
+    "docs/public/media/account-menu.png",
+    "docs/public/media/selection.png",
 }
 PATTERNS = {
     "private-key": re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),

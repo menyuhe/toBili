@@ -32,19 +32,23 @@ def valid_reward(item, body):
     if not all(isinstance(p, str) and p.strip() and len(p) <= 300 and p in quote for p in parts):
         return ""
     from ..domain.prize_label import concise_reward
-    # A detached unit quantity belongs to the immediately preceding prize.
-    joined=[]
-    for part in dict.fromkeys(parts):
-        if joined and re.fullmatch(r'\d+\s*(?:张|份|个|件|套|台|只)',part.strip()):joined[-1]+=' '+part.strip()
-        else:joined.append(part)
-    return concise_reward("；".join(joined))[:1000]
 
+    # A detached unit quantity belongs to the immediately preceding prize.
+    joined = []
+    for part in dict.fromkeys(parts):
+        if joined and re.fullmatch(r"\d+\s*(?:张|份|个|件|套|台|只)", part.strip()):
+            joined[-1] += " " + part.strip()
+        else:
+            joined.append(part)
+    return concise_reward("；".join(joined))[:1000]
 
 
 def review_status(box):
     rows = (
         box.db.connect()
-        .execute("SELECT reward_status,count(*) FROM campaign c WHERE NOT EXISTS(SELECT 1 FROM catalog_removed x WHERE x.dyn_id=c.dyn_id) GROUP BY reward_status")
+        .execute(
+            "SELECT reward_status,count(*) FROM campaign c WHERE NOT EXISTS(SELECT 1 FROM catalog_removed x WHERE x.dyn_id=c.dyn_id) GROUP BY reward_status"
+        )
         .fetchall()
     )
     counts = dict(rows)
@@ -65,10 +69,12 @@ def review_status(box):
 
 def review_batch(box, *, size=16):
     from .official_review import pending
+
     # Platform components have structured prizes and draw times, including when no LLM is configured.
-    if hasattr(box,'lanes'):
-        reviewed=pending(box)
-        if reviewed:return reviewed
+    if hasattr(box, "lanes"):
+        reviewed = pending(box)
+        if reviewed:
+            return reviewed
     if not box.llm().ready():
         return 0
     rows = (

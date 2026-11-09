@@ -36,8 +36,14 @@ class BiliWriter:
 
         code = codes.code_of(payload)
         message = str(payload.get("message") or payload.get("msg") or "")
-        verify_state = action.kind is ActionKind.FOLLOW or (action.kind is ActionKind.FAVORITE and action.payload.get('target') == 'opus')
-        if verify_state and (code == codes.OK or code in codes.ALREADY_DONE_CODES or (action.kind is ActionKind.FAVORITE and code == 75008)):
+        verify_state = action.kind is ActionKind.FOLLOW or (
+            action.kind is ActionKind.FAVORITE and action.payload.get("target") == "opus"
+        )
+        if verify_state and (
+            code == codes.OK
+            or code in codes.ALREADY_DONE_CODES
+            or (action.kind is ActionKind.FAVORITE and code == 75008)
+        ):
             return self._verify_interaction(action)
         if code == codes.OK:
             if action.kind is ActionKind.SHARE:
@@ -90,22 +96,34 @@ class BiliWriter:
 
     def _verify_interaction(self, action):
         from .interaction_state import favorite_state, following_attribute
-        label = '关注' if action.kind is ActionKind.FOLLOW else '收藏'
+
+        label = "关注" if action.kind is ActionKind.FOLLOW else "收藏"
         try:
             if action.kind is ActionKind.FOLLOW:
-                uid=action.payload.get('up_uid') or action.payload.get('fid')
-                answer=codes.ensure_ok(self._transport.fetch(endpoints.RELATION,query={'fid':uid},
-                    referer=f'https://space.bilibili.com/{uid}'),what='核实关注状态')
-                state=following_attribute((answer.get('data') or {}).get('attribute'))
+                uid = action.payload.get("up_uid") or action.payload.get("fid")
+                answer = codes.ensure_ok(
+                    self._transport.fetch(
+                        endpoints.RELATION,
+                        query={"fid": uid},
+                        referer=f"https://space.bilibili.com/{uid}",
+                    ),
+                    what="核实关注状态",
+                )
+                state = following_attribute((answer.get("data") or {}).get("attribute"))
             else:
                 for turn in range(4):
-                    state=favorite_state(self._transport,action.dyn_id)
-                    if state is True:break
-                    if turn < 3:self._wait(0.6 + 0.4 * turn)
-            if state is True:return Receipt.success(message=f'已核实{label}成功')
+                    state = favorite_state(self._transport, action.dyn_id)
+                    if state is True:
+                        break
+                    if turn < 3:
+                        self._wait(0.6 + 0.4 * turn)
+            if state is True:
+                return Receipt.success(message=f"已核实{label}成功")
         except RemoteError as exc:
-            return Receipt.unclear(f'{label}提交后未能确认状态：{exc}',fault=exc.fault)
-        return Receipt.unclear(f'{label}已提交，但未确认成功；不会继续后续动作或自动重发',fault=Fault.PARSE)
+            return Receipt.unclear(f"{label}提交后未能确认状态：{exc}", fault=exc.fault)
+        return Receipt.unclear(
+            f"{label}已提交，但未确认成功；不会继续后续动作或自动重发", fault=Fault.PARSE
+        )
 
     # ---- 派发 ----
     def _dispatch(self, action: Action) -> dict:
@@ -213,19 +231,31 @@ class BiliWriter:
     def _like(self, action: Action) -> dict:
         return self._transport.submit_json(
             endpoints.THUMB_DYN,
-            {"dyn_id_str": action.dyn_id, "up": 1,
-             "spmid": "333.1369.0.0", "from_spmid": "333.999.0.0"},
+            {
+                "dyn_id_str": action.dyn_id,
+                "up": 1,
+                "spmid": "333.1369.0.0",
+                "from_spmid": "333.999.0.0",
+            },
             query={"csrf": self._transport.csrf},
             referer=endpoints.dyn_referer(action.dyn_id),
         )
 
     def _favorite(self, action: Action) -> dict:
-        if action.payload.get('target') == 'opus':
+        if action.payload.get("target") == "opus":
             return self._transport.submit_json(
                 endpoints.OPUS_ACTION,
-                {'entity':{'object_id_str':action.dyn_id,'type':{'biz':2}},'action':3,
-                 'meta':{'spmid':'444.42.0.0','from_spmid':'333.1365.0.0','from':'unknown'}},
-                query={'csrf':self._transport.csrf},referer=endpoints.dyn_referer(action.dyn_id),
+                {
+                    "entity": {"object_id_str": action.dyn_id, "type": {"biz": 2}},
+                    "action": 3,
+                    "meta": {
+                        "spmid": "444.42.0.0",
+                        "from_spmid": "333.1365.0.0",
+                        "from": "unknown",
+                    },
+                },
+                query={"csrf": self._transport.csrf},
+                referer=endpoints.dyn_referer(action.dyn_id),
             )
         folder = action.payload.get("folder_id")
         if not folder:

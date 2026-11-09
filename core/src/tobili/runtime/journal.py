@@ -111,12 +111,13 @@ class Journal:
         if probe is ProbeState.PRESENT:
             return Step(Outcome.SKIPPED_PRESENT, probe, "已做过，跳过")
         if not may_write(probe):
-            if action.kind is ActionKind.FAVORITE and action.payload.get('optional') == '1':
-                return Step(Outcome.NOT_APPLICABLE, probe, '未取得可确认的收藏入口，跳过可选收藏')
+            if action.kind is ActionKind.FAVORITE and action.payload.get("optional") == "1":
+                return Step(Outcome.NOT_APPLICABLE, probe, "未取得可确认的收藏入口，跳过可选收藏")
             return Step(
                 Outcome.SKIPPED_UNKNOWN,
                 probe,
-                getattr(self._gateway, "probe_reason", "") or "无法确认是否已做过，为避免重复已跳过",
+                getattr(self._gateway, "probe_reason", "")
+                or "无法确认是否已做过，为避免重复已跳过",
             )
 
         if self.action_guard:
@@ -197,39 +198,67 @@ class Journal:
         if probe is ProbeState.PRESENT:
             return Step(Outcome.SKIPPED_PRESENT, probe, "已做过，跳过")
         if not may_write(probe):
-            if action.kind is ActionKind.FAVORITE and action.payload.get('optional') == '1':
-                return Step(Outcome.NOT_APPLICABLE, probe, '未取得可确认的收藏入口，跳过可选收藏')
-            return Step(Outcome.SKIPPED_UNKNOWN, probe, getattr(self._gateway, "probe_reason", "") or "无法确认是否已做过")
+            if action.kind is ActionKind.FAVORITE and action.payload.get("optional") == "1":
+                return Step(Outcome.NOT_APPLICABLE, probe, "未取得可确认的收藏入口，跳过可选收藏")
+            return Step(
+                Outcome.SKIPPED_UNKNOWN,
+                probe,
+                getattr(self._gateway, "probe_reason", "") or "无法确认是否已做过",
+            )
         return Step(Outcome.SETTLED, probe, "确认未做过，可以执行")
 
     def _prior(self, account_id, campaign_id, action):
         # Only participation actions are immutable deduplication records. Cleanup
         # still needs a live probe and must not inherit this shortcut.
-        if action.kind not in (ActionKind.FOLLOW, ActionKind.SHARE, ActionKind.COMMENT, ActionKind.LIKE, ActionKind.RESERVE, ActionKind.FAVORITE):
+        if action.kind not in (
+            ActionKind.FOLLOW,
+            ActionKind.SHARE,
+            ActionKind.COMMENT,
+            ActionKind.LIKE,
+            ActionKind.RESERVE,
+            ActionKind.FAVORITE,
+        ):
             return None
-        lookup = getattr(self._intents, 'prior_action', None)
+        lookup = getattr(self._intents, "prior_action", None)
         prior = lookup(account_id, campaign_id, action.kind) if lookup and campaign_id else None
         if not prior:
             return None
-        if prior['state'] == 'done':
+        if prior["state"] == "done":
             if action.kind is ActionKind.FOLLOW:
                 return None  # Follow relationships can change; query the live relation.
-            return Step(Outcome.DUPLICATE, ProbeState.PRESENT, '本账号已有成功记录，不重复执行')
-        if prior['state'] in ('reserved', 'unknown'):
-            if (action.kind is ActionKind.FAVORITE and prior['state'] == 'unknown'
-                and prior['error_class'] == 'parse'
-                and prior['message'].startswith('收藏已提交，但未确认成功')):
+            return Step(Outcome.DUPLICATE, ProbeState.PRESENT, "本账号已有成功记录，不重复执行")
+        if prior["state"] in ("reserved", "unknown"):
+            if (
+                action.kind is ActionKind.FAVORITE
+                and prior["state"] == "unknown"
+                and prior["error_class"] == "parse"
+                and prior["message"].startswith("收藏已提交，但未确认成功")
+            ):
                 # The POST was accepted, but its read-after-write result lagged.
                 # Only settle a later positive read; ABSENT never authorizes resend.
                 state = self._gateway.did(action.kind, dyn_id=action.dyn_id, payload=action.payload)
                 if state is ProbeState.PRESENT:
-                    self._intents.settle(prior['id'], ok=True, ambiguous=False, fault='',
-                        message=prior['message'] + '；后续只读复核已确认收藏', now=self._clock.now())
-                    return Step(Outcome.SKIPPED_PRESENT, state, '已核实此前收藏，不重复提交')
-                return Step(Outcome.UNKNOWN, state, prior['message'])
-            return Step(Outcome.UNKNOWN, ProbeState.UNKNOWN, '已有发送记录但结果未确认，需要核对；不会重复发送')
-        if prior['state'] == 'rejected':
-            return Step(Outcome.REJECTED, ProbeState.UNKNOWN, prior['message'] or '上次操作被拒绝，不会自动重发')
+                    self._intents.settle(
+                        prior["id"],
+                        ok=True,
+                        ambiguous=False,
+                        fault="",
+                        message=prior["message"] + "；后续只读复核已确认收藏",
+                        now=self._clock.now(),
+                    )
+                    return Step(Outcome.SKIPPED_PRESENT, state, "已核实此前收藏，不重复提交")
+                return Step(Outcome.UNKNOWN, state, prior["message"])
+            return Step(
+                Outcome.UNKNOWN,
+                ProbeState.UNKNOWN,
+                "已有发送记录但结果未确认，需要核对；不会重复发送",
+            )
+        if prior["state"] == "rejected":
+            return Step(
+                Outcome.REJECTED,
+                ProbeState.UNKNOWN,
+                prior["message"] or "上次操作被拒绝，不会自动重发",
+            )
         return None
 
     def _emit(self, topic: str, action: Action, account_id: int, **fields: object) -> None:

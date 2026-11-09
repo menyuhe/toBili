@@ -1,10 +1,13 @@
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+
 import pytest
+
 from tobili.adapters.bili.official_draw import component, notice_facts, read_draw
-from tobili.adapters.bili.public_sources import opus_item
 from tobili.adapters.bili.parser import to_detail, to_feed_item
-from tobili.domain.campaign import Campaign, CampaignKind as K
+from tobili.adapters.bili.public_sources import opus_item
+from tobili.domain.campaign import Campaign
+from tobili.domain.campaign import CampaignKind as K
 from tobili.domain.draw import DrawFacts
 from tobili.domain.extract import deadline_from
 from tobili.runtime.journal import Journal
@@ -190,8 +193,8 @@ def test_expired_entry_does_not_prevent_next_entry(repos, gateway, clock, accoun
 
 
 def test_official_scan_ignores_model_and_has_confidence(repos, gateway, clock):
-    from tobili.usecases.scan_feeds import ScanFeeds
     from tobili.ports.models import FeedItem
+    from tobili.usecases.scan_feeds import ScanFeeds
 
     facts = notice_facts(notice(), "123", 1)
     original = gateway.detail("123")
@@ -282,27 +285,68 @@ def test_missing_previously_known_component_is_not_a_regular_post(
     assert not gateway.writes and "组件未能读取" in result.reason
 
 
-def test_official_minute_is_not_lost_to_text_date_only_review(repos,clock):
+def test_official_minute_is_not_lost_to_text_date_only_review(repos, clock):
     from tobili.usecases.deadline_review import review_existing
-    facts=notice_facts(notice(),'123',1)
-    cid=repos.campaigns.upsert(Campaign('123','42','奖品',K.SHARE,body_text='11月25日开奖',published_at=clock.now(),draw=facts))
-    review_existing(repos.db,clock.now())
-    row=repos.db.connect().execute('SELECT * FROM deadline_check WHERE campaign_id=?',(cid,)).fetchone()
-    assert row['state']=='official' and row['precision']=='minute'
-    assert repos.campaigns.get(cid)['deadline_at']==facts.deadline.isoformat()
+
+    facts = notice_facts(notice(), "123", 1)
+    cid = repos.campaigns.upsert(
+        Campaign(
+            "123",
+            "42",
+            "奖品",
+            K.SHARE,
+            body_text="11月25日开奖",
+            published_at=clock.now(),
+            draw=facts,
+        )
+    )
+    review_existing(repos.db, clock.now())
+    row = (
+        repos.db.connect()
+        .execute("SELECT * FROM deadline_check WHERE campaign_id=?", (cid,))
+        .fetchone()
+    )
+    assert row["state"] == "official" and row["precision"] == "minute"
+    assert repos.campaigns.get(cid)["deadline_at"] == facts.deadline.isoformat()
 
 
 def test_topic_named_interactive_draw_is_not_an_official_widget():
     from tobili.adapters.bili.official_draw import has_component
-    item={'id_str':'123','modules':{'module_dynamic':{'desc':{'text':'#互动抽奖# 关注转发抽奖','rich_text_nodes':[{'type':'RICH_TEXT_NODE_TYPE_TOPIC','text':'互动抽奖'}]}}}}
+
+    item = {
+        "id_str": "123",
+        "modules": {
+            "module_dynamic": {
+                "desc": {
+                    "text": "#互动抽奖# 关注转发抽奖",
+                    "rich_text_nodes": [{"type": "RICH_TEXT_NODE_TYPE_TOPIC", "text": "互动抽奖"}],
+                }
+            }
+        },
+    }
+
     class NoRequest:
-        def fetch(self,*a,**k):pytest.fail('Topic must not request official notice')
+        def fetch(self, *a, **k):
+            pytest.fail("Topic must not request official notice")
+
     assert not has_component(item)
-    assert read_draw(NoRequest(),item) is None
+    assert read_draw(NoRequest(), item) is None
 
 
 def test_actual_lottery_rich_node_reads_notice():
-    item={'id_str':'123','modules':{'module_dynamic':{'desc':{'rich_text_nodes':[{'type':'RICH_TEXT_NODE_TYPE_LOTTERY','text':'互动抽奖'}]}}}}
+    item = {
+        "id_str": "123",
+        "modules": {
+            "module_dynamic": {
+                "desc": {
+                    "rich_text_nodes": [{"type": "RICH_TEXT_NODE_TYPE_LOTTERY", "text": "互动抽奖"}]
+                }
+            }
+        },
+    }
+
     class Wire:
-        def fetch(self,*a,**k):return {'code':0,'data':notice()}
-    assert read_draw(Wire(),item).business_type==1
+        def fetch(self, *a, **k):
+            return {"code": 0, "data": notice()}
+
+    assert read_draw(Wire(), item).business_type == 1

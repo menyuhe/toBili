@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
+
 from .draw import DrawFacts
 
 
@@ -50,7 +51,9 @@ class Campaign:
 
     def is_open(self, now: datetime) -> bool:
         """截止时间未知时按"仍然开放"处理；已知且已过则关闭。"""
-        if self.draw and (self.draw.state != 'active' or (self.draw.deadline and now >= self.draw.deadline)):
+        if self.draw and (
+            self.draw.state != "active" or (self.draw.deadline and now >= self.draw.deadline)
+        ):
             return False
         return self.deadline is None or now < self.deadline
 

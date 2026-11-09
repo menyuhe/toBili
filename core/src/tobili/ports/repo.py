@@ -83,7 +83,9 @@ class EnrollmentRepo(Protocol):
 
 
 class IntentRepo(Protocol):
-    def prior_action(self, account_id: int, campaign_id: int, action: ActionKind) -> dict | None: ...
+    def prior_action(
+        self, account_id: int, campaign_id: int, action: ActionKind
+    ) -> dict | None: ...
 
     def reserve(
         self,

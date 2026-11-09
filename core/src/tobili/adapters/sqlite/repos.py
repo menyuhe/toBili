@@ -323,7 +323,11 @@ class CampaignRepo:
         self._db = db
 
     def removed(self, dyn_id: str) -> bool:
-        return bool(self._db.connect().execute('SELECT 1 FROM catalog_removed WHERE dyn_id=?',(dyn_id,)).fetchone())
+        return bool(
+            self._db.connect()
+            .execute("SELECT 1 FROM catalog_removed WHERE dyn_id=?", (dyn_id,))
+            .fetchone()
+        )
 
     def blocked(self, uid: str) -> bool:
         return bool(
@@ -334,8 +338,10 @@ class CampaignRepo:
 
     def upsert(self, campaign: Campaign, *, source_ref: str = "") -> int:
         from dataclasses import replace
+
         from ...domain.prize_label import concise_reward
-        campaign=replace(campaign,reward=concise_reward(campaign.reward))
+
+        campaign = replace(campaign, reward=concise_reward(campaign.reward))
         now = stamp(campaign.seen_at or _utcnow())
         with self._db.write() as conn:
             conn.execute(
@@ -385,22 +391,48 @@ class CampaignRepo:
                 ),
             )
             if campaign.draw:
-                draw=campaign.draw
-                manual=False
+                draw = campaign.draw
+                manual = False
                 if conn.execute("SELECT 1 FROM sqlite_master WHERE name='pro_edits'").fetchone():
-                    edited=conn.execute('SELECT accepted FROM pro_edits WHERE dyn=?',(campaign.dyn_id,)).fetchone()
-                    manual=bool(edited and 'deadline_at' in json.loads(edited[0]))
-                conn.execute("UPDATE campaign SET draw_business_id=?,draw_business_type=?,draw_state=CASE WHEN draw_state='ended' THEN draw_state ELSE ? END,draw_checked_at=?,draw_reason=CASE WHEN draw_state='ended' AND ?='' THEN draw_reason ELSE ? END WHERE id=?",
-                    (draw.business_id,draw.business_type,draw.state,now,draw.reason,draw.reason,row['id']))
+                    edited = conn.execute(
+                        "SELECT accepted FROM pro_edits WHERE dyn=?", (campaign.dyn_id,)
+                    ).fetchone()
+                    manual = bool(edited and "deadline_at" in json.loads(edited[0]))
+                conn.execute(
+                    "UPDATE campaign SET draw_business_id=?,draw_business_type=?,draw_state=CASE WHEN draw_state='ended' THEN draw_state ELSE ? END,draw_checked_at=?,draw_reason=CASE WHEN draw_state='ended' AND ?='' THEN draw_reason ELSE ? END WHERE id=?",
+                    (
+                        draw.business_id,
+                        draw.business_type,
+                        draw.state,
+                        now,
+                        draw.reason,
+                        draw.reason,
+                        row["id"],
+                    ),
+                )
                 if draw.verified:
                     if draw.deadline and not manual:
-                        conn.execute('DELETE FROM deadline_check WHERE campaign_id=?',(row['id'],))
-                    conn.execute("UPDATE campaign SET kind=?,reward=CASE WHEN reward_locked=0 AND ?!='' THEN ? ELSE reward END,reward_status=CASE WHEN reward_locked=0 AND ?!='' THEN 'verified' ELSE reward_status END,deadline_at=CASE WHEN ?=0 THEN COALESCE(?,deadline_at) ELSE deadline_at END WHERE id=?",
-                        ('reserve' if draw.business_type==10 else 'share',draw.reward,draw.reward,draw.reward,int(manual),stamp(draw.deadline) if draw.deadline else None,row['id']))
-            override=conn.execute('SELECT value FROM deadline_override WHERE campaign_id=?',(row['id'],)).fetchone()
+                        conn.execute("DELETE FROM deadline_check WHERE campaign_id=?", (row["id"],))
+                    conn.execute(
+                        "UPDATE campaign SET kind=?,reward=CASE WHEN reward_locked=0 AND ?!='' THEN ? ELSE reward END,reward_status=CASE WHEN reward_locked=0 AND ?!='' THEN 'verified' ELSE reward_status END,deadline_at=CASE WHEN ?=0 THEN COALESCE(?,deadline_at) ELSE deadline_at END WHERE id=?",
+                        (
+                            "reserve" if draw.business_type == 10 else "share",
+                            draw.reward,
+                            draw.reward,
+                            draw.reward,
+                            int(manual),
+                            stamp(draw.deadline) if draw.deadline else None,
+                            row["id"],
+                        ),
+                    )
+            override = conn.execute(
+                "SELECT value FROM deadline_override WHERE campaign_id=?", (row["id"],)
+            ).fetchone()
             if override:
-                conn.execute('UPDATE campaign SET deadline_at=? WHERE id=?',(override[0],row['id']))
-                conn.execute('DELETE FROM deadline_check WHERE campaign_id=?',(row['id'],))
+                conn.execute(
+                    "UPDATE campaign SET deadline_at=? WHERE id=?", (override[0], row["id"])
+                )
+                conn.execute("DELETE FROM deadline_check WHERE campaign_id=?", (row["id"],))
         return int(row["id"])
 
     def get(self, campaign_id: int) -> dict[str, object] | None:
@@ -488,11 +520,20 @@ class CampaignRepo:
         的组合 —— 拼在一条 SQL 里，判断依据就只有一个来源。
         """
         where: list[str] = []
-        if state not in ('review','all_records','cleaned'):
-            where.append('NOT EXISTS(SELECT 1 FROM catalog_removed x WHERE x.dyn_id=c.dyn_id)')
+        if state not in ("review", "all_records", "cleaned"):
+            where.append("NOT EXISTS(SELECT 1 FROM catalog_removed x WHERE x.dyn_id=c.dyn_id)")
             from ...usecases.catalog_policy import enabled
+
             if enabled(self._db):
-                where.extend(["c.kind NOT IN ('unknown','check_in')", "c.reward_status IN ('verified','manual')", "trim(c.reward)!=''", "c.draw_state NOT IN ('ended','unverified','unsupported')", f"{_EXPIRES}>strftime('%Y-%m-%dT%H:%M:%S+00:00','now')"])
+                where.extend(
+                    [
+                        "c.kind NOT IN ('unknown','check_in')",
+                        "c.reward_status IN ('verified','manual')",
+                        "trim(c.reward)!=''",
+                        "c.draw_state NOT IN ('ended','unverified','unsupported')",
+                        f"{_EXPIRES}>strftime('%Y-%m-%dT%H:%M:%S+00:00','now')",
+                    ]
+                )
         if state not in ("review", "all_records", "cleaned", "shelved"):
             where.append("NOT EXISTS(SELECT 1 FROM up_block b WHERE b.uid=c.up_uid AND b.active=1)")
         filters: list[object] = []
@@ -531,7 +572,11 @@ class CampaignRepo:
             filters.extend([like, like, like, keyword.strip()])
         if kind:
             kinds = [k for k in kind.split(",") if k]
-            where.append("(CASE WHEN c.draw_business_type=1 THEN 'interactive' ELSE c.kind END) IN (" + ",".join("?" for _ in kinds) + ")")
+            where.append(
+                "(CASE WHEN c.draw_business_type=1 THEN 'interactive' ELSE c.kind END) IN ("
+                + ",".join("?" for _ in kinds)
+                + ")"
+            )
             filters.extend(kinds)
         predicates = {
             "enrolled": "e.id IS NOT NULL",
@@ -689,8 +734,10 @@ class CampaignRepo:
         return [str(r["feed_label"]) for r in rows]
 
     def no_candidate_reason(self, account_id: int, *, now: datetime, floor: float) -> str:
-        rows = self._db.connect().execute(
-            f"""SELECT CASE
+        rows = (
+            self._db.connect()
+            .execute(
+                f"""SELECT CASE
             WHEN EXISTS(SELECT 1 FROM up_block b WHERE b.uid=c.up_uid AND b.active=1) THEN 'UP 已屏蔽'
             WHEN EXISTS(SELECT 1 FROM closed_shelf s WHERE s.account_id=? AND s.campaign_id=c.id) THEN '已收存'
             WHEN {_EXPIRES} IS NOT NULL AND {_EXPIRES}<=? THEN '已截止'
@@ -700,11 +747,18 @@ class CampaignRepo:
             WHEN c.kind='unknown' OR c.confidence<? THEN '参与方式待核对'
             ELSE '可参与' END candidate_reason,COUNT(*) amount
             FROM campaign c LEFT JOIN enrollment e ON e.campaign_id=c.id AND e.account_id=?
-            GROUP BY candidate_reason""", (account_id,stamp(now),floor,account_id)
-        ).fetchall()
-        counts = {r['candidate_reason']:r['amount'] for r in rows}
-        details = '、'.join(f'{key} {counts[key]} 条' for key in ('参与方式待核对','已截止','已有参与记录','UP 已屏蔽','已收存') if counts.get(key))
-        return '待参与为空；奖品库暂无自动候选' + (f'：{details}' if details else '')
+            GROUP BY candidate_reason""",
+                (account_id, stamp(now), floor, account_id),
+            )
+            .fetchall()
+        )
+        counts = {r["candidate_reason"]: r["amount"] for r in rows}
+        details = "、".join(
+            f"{key} {counts[key]} 条"
+            for key in ("参与方式待核对", "已截止", "已有参与记录", "UP 已屏蔽", "已收存")
+            if counts.get(key)
+        )
+        return "待参与为空；奖品库暂无自动候选" + (f"：{details}" if details else "")
 
     def candidates(
         self, account_id: int, *, now: datetime, floor: float, limit: int
@@ -743,6 +797,7 @@ class CampaignRepo:
 
 def _to_campaign(row) -> Campaign:  # type: ignore[no-untyped-def]
     from ...domain.draw import DrawFacts
+
     return Campaign(
         dyn_id=row["dyn_id"],
         up_uid=row["up_uid"],
@@ -757,7 +812,16 @@ def _to_campaign(row) -> Campaign:  # type: ignore[no-untyped-def]
         seen_at=parse_stamp(row["first_seen_at"]),
         published_at=parse_stamp(row["published_at"]),
         body_text=row["body_text"],
-        draw=DrawFacts(row['draw_business_id'],row['draw_business_type'],row['reward'],parse_stamp(row['deadline_at']),row['draw_state'],row['draw_reason']) if row['draw_state'] else None,
+        draw=DrawFacts(
+            row["draw_business_id"],
+            row["draw_business_type"],
+            row["reward"],
+            parse_stamp(row["deadline_at"]),
+            row["draw_state"],
+            row["draw_reason"],
+        )
+        if row["draw_state"]
+        else None,
     )
 
 
@@ -891,10 +955,14 @@ class IntentRepo:
         self._db = db
 
     def prior_action(self, account_id: int, campaign_id: int, action: ActionKind):
-        row = self._db.connect().execute(
-            "SELECT id,state,error_class,message FROM intent WHERE account_id=? AND campaign_id=? AND action=? ORDER BY id DESC LIMIT 1",
-            (account_id, campaign_id, action.value),
-        ).fetchone()
+        row = (
+            self._db.connect()
+            .execute(
+                "SELECT id,state,error_class,message FROM intent WHERE account_id=? AND campaign_id=? AND action=? ORDER BY id DESC LIMIT 1",
+                (account_id, campaign_id, action.value),
+            )
+            .fetchone()
+        )
         return dict(row) if row else None
 
     def reserve(
@@ -908,21 +976,29 @@ class IntentRepo:
         now: datetime,
     ) -> tuple[int, bool]:
         with self._db.write() as conn:
-            if action in (ActionKind.FOLLOW, ActionKind.SHARE, ActionKind.COMMENT, ActionKind.LIKE, ActionKind.RESERVE, ActionKind.FAVORITE):
+            if action in (
+                ActionKind.FOLLOW,
+                ActionKind.SHARE,
+                ActionKind.COMMENT,
+                ActionKind.LIKE,
+                ActionKind.RESERVE,
+                ActionKind.FAVORITE,
+            ):
                 previous = conn.execute(
                     "SELECT id,state FROM intent WHERE account_id=? AND campaign_id=? AND action=? ORDER BY id DESC LIMIT 1",
                     (account_id, campaign_id, action.value),
                 ).fetchone()
                 if previous:
-                    if (action is ActionKind.FOLLOW and previous['state'] == 'done') or (
-                        action is ActionKind.LIKE and previous['state'] == 'legacy_like_rejected'
+                    if (action is ActionKind.FOLLOW and previous["state"] == "done") or (
+                        action is ActionKind.LIKE and previous["state"] == "legacy_like_rejected"
                     ):
                         # A live ABSENT relation probe may follow again after an
                         # earlier confirmed follow was removed. Preserve the old row.
                         import uuid
-                        fingerprint = fingerprint + ':' + uuid.uuid4().hex
+
+                        fingerprint = fingerprint + ":" + uuid.uuid4().hex
                     else:
-                        return int(previous['id']), False
+                        return int(previous["id"]), False
             cursor = conn.execute(
                 "INSERT OR IGNORE INTO intent (account_id, campaign_id, action, fingerprint,"
                 " content, state, created_at) VALUES (?, ?, ?, ?, ?, 'reserved', ?)",

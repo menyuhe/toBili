@@ -41,8 +41,13 @@ def guard_action(box, campaign_id, action):
     if action.kind not in PARTICIPATION:
         return
     row = box.repos.campaigns.get(campaign_id)
-    if row and box.db.connect().execute('SELECT 1 FROM catalog_removed WHERE dyn_id=?',(row['dyn_id'],)).fetchone():
-        raise WriteUnavailable('该活动已从奖品目录删除')
+    if (
+        row
+        and box.db.connect()
+        .execute("SELECT 1 FROM catalog_removed WHERE dyn_id=?", (row["dyn_id"],))
+        .fetchone()
+    ):
+        raise WriteUnavailable("该活动已从奖品目录删除")
     uid = str((row or {}).get("up_uid") or action.payload.get("up_uid") or "")
     if blocked(box.db, uid):
         raise WriteUnavailable("该 UP 已列入黑名单，禁止参与")
@@ -70,24 +75,37 @@ def edit_prize(box, cid, reward, expected, evidence):
     return {"reward": reward, "reward_status": "manual"}
 
 
-def edit_deadline(box,cid,value,expected):
-    from ..adapters.sqlite.db import stamp,parse_stamp
+def edit_deadline(box, cid, value, expected):
     from datetime import datetime
-    try:dt=datetime.fromisoformat(value)
-    except ValueError:dt=None
-    if not dt or dt.tzinfo is None:raise ValueError('请提供带时区的开奖时间')
+
+    from ..adapters.sqlite.db import parse_stamp, stamp
+
+    try:
+        dt = datetime.fromisoformat(value)
+    except ValueError:
+        dt = None
+    if not dt or dt.tzinfo is None:
+        raise ValueError("请提供带时区的开奖时间")
     with box.db.write() as db:
-        row=db.execute('SELECT deadline_at,dyn_id FROM campaign WHERE id=?',(cid,)).fetchone()
-        if not row:raise LookupError('活动不存在')
-        if parse_stamp(row[0])!=parse_stamp(expected):raise ValueError('时间已更新，请重新打开后修改')
-        db.execute('INSERT OR REPLACE INTO deadline_override VALUES(?,?,?)',(cid,stamp(dt),stamp(box.clock.now())))
-        db.execute('UPDATE campaign SET deadline_at=? WHERE id=?',(stamp(dt),cid))
-        db.execute('DELETE FROM deadline_check WHERE campaign_id=?',(cid,))
-        db.execute('DELETE FROM deadline_origin WHERE campaign_id=?',(cid,))
+        row = db.execute("SELECT deadline_at,dyn_id FROM campaign WHERE id=?", (cid,)).fetchone()
+        if not row:
+            raise LookupError("活动不存在")
+        if parse_stamp(row[0]) != parse_stamp(expected):
+            raise ValueError("时间已更新，请重新打开后修改")
+        db.execute(
+            "INSERT OR REPLACE INTO deadline_override VALUES(?,?,?)",
+            (cid, stamp(dt), stamp(box.clock.now())),
+        )
+        db.execute("UPDATE campaign SET deadline_at=? WHERE id=?", (stamp(dt), cid))
+        db.execute("DELETE FROM deadline_check WHERE campaign_id=?", (cid,))
+        db.execute("DELETE FROM deadline_origin WHERE campaign_id=?", (cid,))
         if db.execute("SELECT 1 FROM sqlite_master WHERE name='pro_edits'").fetchone():
             import json
-            old=db.execute('SELECT accepted FROM pro_edits WHERE dyn=?',(row[1],)).fetchone()
-            accepted=json.loads(old[0]) if old else {}
-            accepted['deadline_at']=stamp(dt)
-            db.execute('INSERT OR REPLACE INTO pro_edits VALUES(?,?)',(row[1],json.dumps(accepted)))
-    return {'deadline_at':stamp(dt)}
+
+            old = db.execute("SELECT accepted FROM pro_edits WHERE dyn=?", (row[1],)).fetchone()
+            accepted = json.loads(old[0]) if old else {}
+            accepted["deadline_at"] = stamp(dt)
+            db.execute(
+                "INSERT OR REPLACE INTO pro_edits VALUES(?,?)", (row[1], json.dumps(accepted))
+            )
+    return {"deadline_at": stamp(dt)}

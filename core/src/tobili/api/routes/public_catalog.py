@@ -72,7 +72,9 @@ def import_page(box, page, cursor):
     added = 0
     with box.db.write() as db:
         for card in cards:
-            if db.execute('SELECT 1 FROM catalog_removed WHERE dyn_id=?',(card.dyn_id,)).fetchone():
+            if db.execute(
+                "SELECT 1 FROM catalog_removed WHERE dyn_id=?", (card.dyn_id,)
+            ).fetchone():
                 continue
             if db.execute(
                 "SELECT 1 FROM up_block WHERE uid=? AND active=1", (card.up_uid,)

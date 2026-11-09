@@ -63,16 +63,31 @@ class ScanFeeds:
     def _event(self, source, owner, phase, **fields):
         if not self._events:
             return
-        kind = source['kind']
-        label = str(source.get('label') or source.get('target') or '')
-        name = {'topic':'话题', 'collection':'UP 合集', 'space':'UP 动态', 'follow':'关注流'}.get(kind, '订阅源')
-        suffix = {'started':'开始更新', 'cached':'已由共享订阅更新，本轮复用'}.get(phase)
+        kind = source["kind"]
+        label = str(source.get("label") or source.get("target") or "")
+        name = {
+            "topic": "话题",
+            "collection": "UP 合集",
+            "space": "UP 动态",
+            "follow": "关注流",
+        }.get(kind, "订阅源")
+        suffix = {"started": "开始更新", "cached": "已由共享订阅更新，本轮复用"}.get(phase)
         if suffix is None:
-            suffix = f"读取 {fields.get('scanned',0)} 条，识别 {fields.get('matched',0)} 条"
-            if fields.get('problems'):
-                suffix += '；' + '；'.join(fields['problems'])
-        self._events.publish('source.update', dict(account_id=owner, scope='shared' if kind in ('topic','collection') else 'account',
-            feed_id=source['id'], feed_kind=kind, phase=phase, title=f'{name} · {label} · {suffix}', **fields))
+            suffix = f"读取 {fields.get('scanned', 0)} 条，识别 {fields.get('matched', 0)} 条"
+            if fields.get("problems"):
+                suffix += "；" + "；".join(fields["problems"])
+        self._events.publish(
+            "source.update",
+            dict(
+                account_id=owner,
+                scope="shared" if kind in ("topic", "collection") else "account",
+                feed_id=source["id"],
+                feed_kind=kind,
+                phase=phase,
+                title=f"{name} · {label} · {suffix}",
+                **fields,
+            ),
+        )
 
     def run(
         self,
@@ -112,9 +127,9 @@ class ScanFeeds:
             with context as source:
                 if source is None:
                     reused += 1
-                    self._event(candidate, account_id, 'cached')
+                    self._event(candidate, account_id, "cached")
                     continue
-                self._event(source, account_id, 'started')
+                self._event(source, account_id, "started")
                 scanned_before, matched_before, problems_before = scanned, matched, len(problems)
                 feed_id = int(source["id"])
                 label = str(source.get("label") or source.get("target") or "")
@@ -130,7 +145,7 @@ class ScanFeeds:
                             progress.update(json.loads(saved[3:]))
                         except (ValueError, TypeError):
                             problems.append(f"{label}：扫描进度损坏，请重新添加该订阅")
-                            self._event(source, account_id, 'failed', problems=[problems[-1]])
+                            self._event(source, account_id, "failed", problems=[problems[-1]])
                             continue
                     elif saved:
                         progress["history"] = saved
@@ -150,18 +165,39 @@ class ScanFeeds:
                         break
 
                     scanned += page.count
-                    old_topic = source['kind']=='topic' and bool(page.items) and all(x.published_at and x.published_at < now-timedelta(days=7) for x in page.items)
+                    old_topic = (
+                        source["kind"] == "topic"
+                        and bool(page.items)
+                        and all(
+                            x.published_at and x.published_at < now - timedelta(days=7)
+                            for x in page.items
+                        )
+                    )
                     for item in page.items:
-                        if source['kind']=='topic' and (not item.published_at or item.published_at < now-timedelta(days=7)):
+                        if source["kind"] == "topic" and (
+                            not item.published_at or item.published_at < now - timedelta(days=7)
+                        ):
                             continue
-                        if getattr(self._campaigns,'removed',lambda _:False)(item.dyn_id):continue
+                        if getattr(self._campaigns, "removed", lambda _: False)(item.dyn_id):
+                            continue
                         try:
                             campaign = self._build(item, now=now, label=label)
                         except Exception as exc:
-                            from ..domain.errors import RemoteError,Fault
-                            if not isinstance(exc,RemoteError) or exc.fault in (Fault.AUTH,Fault.RISK,Fault.RATE_LIMIT):
-                                self._event(source, account_id, 'failed', scanned=scanned-scanned_before,
-                                            matched=matched-matched_before, problems=[safe_exception(exc)])
+                            from ..domain.errors import Fault, RemoteError
+
+                            if not isinstance(exc, RemoteError) or exc.fault in (
+                                Fault.AUTH,
+                                Fault.RISK,
+                                Fault.RATE_LIMIT,
+                            ):
+                                self._event(
+                                    source,
+                                    account_id,
+                                    "failed",
+                                    scanned=scanned - scanned_before,
+                                    matched=matched - matched_before,
+                                    problems=[safe_exception(exc)],
+                                )
                                 raise
                             problems.append(f"{item.dyn_id}：{safe_exception(exc)}")
                             continue
@@ -190,7 +226,8 @@ class ScanFeeds:
                                     progress["next_head"] = page.items[0].dyn_id
                                 previous = progress.get("head", "")
                                 finished = (
-                                    page.exhausted or old_topic
+                                    page.exhausted
+                                    or old_topic
                                     or (
                                         bool(previous)
                                         and any(x.dyn_id == previous for x in page.items)
@@ -225,8 +262,14 @@ class ScanFeeds:
                 finished = getattr(self._feeds, "finish_scan", None)
                 if finished:
                     finished(feed_id, problem=bool(source_problem))
-                self._event(source, account_id, 'finished', scanned=scanned-scanned_before,
-                            matched=matched-matched_before, problems=problems[problems_before:])
+                self._event(
+                    source,
+                    account_id,
+                    "finished",
+                    scanned=scanned - scanned_before,
+                    matched=matched - matched_before,
+                    problems=problems[problems_before:],
+                )
 
         if self._model and self._model.problem:
             problems.append(self._model.problem)
@@ -246,21 +289,35 @@ class ScanFeeds:
     def _build(self, item: FeedItem, *, now, label: str) -> Campaign | None:
         if not item.draw_hint and not looks_like_campaign(item.text):
             return None
-        draw=item.draw
+        draw = item.draw
         if item.draw_hint and draw is None:
-            detail=self._gateway.detail(item.dyn_id)
-            draw=detail.draw
+            detail = self._gateway.detail(item.dyn_id)
+            draw = detail.draw
             from dataclasses import replace
-            item=replace(item,text=detail.text or item.text,up_uid=detail.up_uid or item.up_uid,
-                         up_name=detail.up_name or item.up_name,published_at=detail.published_at or item.published_at)
+
+            item = replace(
+                item,
+                text=detail.text or item.text,
+                up_uid=detail.up_uid or item.up_uid,
+                up_name=detail.up_name or item.up_name,
+                published_at=detail.published_at or item.published_at,
+            )
         reference = (item.published_at or now).astimezone(timezone(timedelta(hours=8)))
         from ..domain.participation import is_roundup
+
         if draw is None and is_roundup(item.text):
             return None
         if draw:
             from ..domain.campaign import CampaignKind
-            kind=CampaignKind.RESERVE if draw.business_type==10 else CampaignKind.SHARE if draw.business_type==1 else CampaignKind.UNKNOWN
-            deadline,reward=draw.deadline,draw.reward
+
+            kind = (
+                CampaignKind.RESERVE
+                if draw.business_type == 10
+                else CampaignKind.SHARE
+                if draw.business_type == 1
+                else CampaignKind.UNKNOWN
+            )
+            deadline, reward = draw.deadline, draw.reward
         else:
             kind, deadline, reward = facts_for(item, reference, self._model)
         if kind.value in ("unknown", "check_in"):
@@ -277,8 +334,13 @@ class ScanFeeds:
             up_name=item.up_name,
             reward=reward,
             deadline=deadline,
-            confidence=(1.0 if draw.verified else 0.0) if draw else
-                (confidence_of(item.text, original_kind, original_deadline) if kind == original_kind else 0.0),
+            confidence=(1.0 if draw.verified else 0.0)
+            if draw
+            else (
+                confidence_of(item.text, original_kind, original_deadline)
+                if kind == original_kind
+                else 0.0
+            ),
             source_ref=label,
             raw_ref=item.raw_ref,
             seen_at=now,

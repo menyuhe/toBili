@@ -7,16 +7,22 @@ from ..deps import get_container
 
 router = APIRouter(prefix="/api", tags=["catalog-controls"])
 
+
 class DeadlineEdit(BaseModel):
     value: str
     expected: str | None = None
 
-@router.put('/campaigns/{cid}/deadline')
-def deadline(cid:int,body:DeadlineEdit,box:Container=Depends(get_container)):
+
+@router.put("/campaigns/{cid}/deadline")
+def deadline(cid: int, body: DeadlineEdit, box: Container = Depends(get_container)):
     from ...usecases.catalog_controls import edit_deadline
-    try:return edit_deadline(box,cid,body.value,body.expected)
-    except LookupError as exc:raise HTTPException(404,str(exc)) from exc
-    except ValueError as exc:raise HTTPException(409,str(exc)) from exc
+
+    try:
+        return edit_deadline(box, cid, body.value, body.expected)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
 
 
 class PrizeEdit(BaseModel):

@@ -3,7 +3,7 @@
 import json
 from datetime import UTC, datetime, timedelta, timezone
 
-from ..publicwire import PublicPrize, UNVERIFIED_REWARD
+from ..publicwire import UNVERIFIED_REWARD, PublicPrize
 
 URL = "https://tobili.4wdo.cn/public/v1/catalog"
 CURSOR = "public_catalog.revision"
@@ -27,7 +27,12 @@ def apply_page(box, page, cursor):
         con.execute(
             "CREATE TABLE IF NOT EXISTS public_import_state(dyn TEXT PRIMARY KEY,payload TEXT NOT NULL)"
         )
-        manual = {r[0] for r in con.execute('SELECT c.dyn_id FROM deadline_override d JOIN campaign c ON c.id=d.campaign_id')}
+        manual = {
+            r[0]
+            for r in con.execute(
+                "SELECT c.dyn_id FROM deadline_override d JOIN campaign c ON c.id=d.campaign_id"
+            )
+        }
         if con.execute("SELECT 1 FROM sqlite_master WHERE name='pro_edits'").fetchone():
             manual |= {
                 r[0]
@@ -35,7 +40,9 @@ def apply_page(box, page, cursor):
                 if "deadline_at" in json.loads(r[1])
             }
         for card in cards:
-            if con.execute('SELECT 1 FROM catalog_removed WHERE dyn_id=?',(card.dyn_id,)).fetchone():
+            if con.execute(
+                "SELECT 1 FROM catalog_removed WHERE dyn_id=?", (card.dyn_id,)
+            ).fetchone():
                 continue
             if con.execute(
                 "SELECT 1 FROM up_block WHERE uid=? AND active=1", (card.up_uid,)
@@ -109,8 +116,14 @@ def apply_page(box, page, cursor):
                         (*changes.values(), row["id"]),
                     )
                     updated += 1
-            if card.reward == UNVERIFIED_REWARD and not row["reward_locked"] and row["reward_status"] != "manual":
-                con.execute("UPDATE campaign SET reward='',reward_status='unknown' WHERE id=?", (row["id"],))
+            if (
+                card.reward == UNVERIFIED_REWARD
+                and not row["reward_locked"]
+                and row["reward_status"] != "manual"
+            ):
+                con.execute(
+                    "UPDATE campaign SET reward='',reward_status='unknown' WHERE id=?", (row["id"],)
+                )
             row = con.execute("SELECT * FROM campaign WHERE id=?", (row["id"],)).fetchone()
             if card.deadline_date and not row["deadline_at"] and card.dyn_id not in manual:
                 # Date-only information stays separate; it must not become a made-up minute.

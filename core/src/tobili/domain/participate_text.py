@@ -35,12 +35,13 @@ def required_comment_text(body: str) -> str:
     Keep the literal intact rather than asking a model to paraphrase it.
     """
     matches = re.findall(
-        r'(?:评论(?:区)?(?:中)?(?:留言|回复|输入)?|留言|回复)'
+        r"(?:评论(?:区)?(?:中)?(?:留言|回复|输入)?|留言|回复)"
         r'\s*(?:关键词|口令|内容)?\s*[:：]?\s*[“"「『【]([^”"」』】\n]{1,60})[”"」』】]',
-        body or '',
+        body or "",
     )
     unique = list(dict.fromkeys(x.strip() for x in matches if x.strip()))
-    return unique[0] if len(unique) == 1 else ''
+    return unique[0] if len(unique) == 1 else ""
+
 
 # 老版本只跳过前 5 条。前几条通常是 UP 置顶和自己人，照抄风险高；太靠后
 # 又多是"我也是""蹲一个"。这个窗口是它的经验值，保留。

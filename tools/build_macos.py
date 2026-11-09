@@ -17,6 +17,7 @@ def main():
         raise SystemExit("macOS 安装包必须在 Mac 或 macOS 构建机上生成")
     from PIL import Image
     from release_version import validate_bundle
+
     version = validate_bundle(ROOT)
 
     private = (ROOT / "core/src/tobili/private_pack.py").is_file()

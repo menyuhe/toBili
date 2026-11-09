@@ -141,7 +141,6 @@ def test_expired_day_cannot_join_queue_or_write(repos, clock, gateway, account_i
 
     import pytest
 
-    from tobili.domain.errors import WriteUnavailable
     from tobili.domain.pool import PoolOp, PoolRejected
     from tobili.usecases.enroll import Enroll
     from tobili.usecases.pool import ManagePool

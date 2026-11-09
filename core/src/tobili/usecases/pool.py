@@ -17,7 +17,7 @@ from datetime import datetime
 from time import sleep
 
 from ..domain.enrollment import Stage
-from ..domain.errors import WriteUnavailable, MissingCredential, RemoteError, Fault
+from ..domain.errors import Fault, MissingCredential, RemoteError, WriteUnavailable
 from ..domain.pool import (
     POOL_LIMIT,
     PoolItem,
@@ -111,8 +111,8 @@ class ManagePool:
             return "这条活动已移到往期架，请先取回"
         if self._campaigns.blocked(str(row.get("up_uid") or "")):
             return "该 UP 已列入黑名单"
-        if row.get('draw_state') in ('ended','unverified','unsupported'):
-            return str(row.get('draw_reason') or '官方抽奖已结束或参与方式待核对')
+        if row.get("draw_state") in ("ended", "unverified", "unsupported"):
+            return str(row.get("draw_reason") or "官方抽奖已结束或参与方式待核对")
         deadline = _as_time(row.get("expires_at") or row.get("deadline_at"))
         if deadline is not None and deadline <= now:
             return f"{row.get('title') or '这条活动'}：已经过开奖时间了"
@@ -234,10 +234,18 @@ class RunPool:
 
         names = {int(row["campaign_id"]): row for row in self._pool.items(account_id)}
         states = self._pool.states(account_id)
-        recoverable = sorted(
-            (item for item in states if item.state is PoolState.REVIEW and history_pending(item.message)),
-            key=lambda item: str(names.get(item.campaign_id, {}).get('updated_at') or ''),
-        )[:3] if apply else []
+        recoverable = (
+            sorted(
+                (
+                    item
+                    for item in states
+                    if item.state is PoolState.REVIEW and history_pending(item.message)
+                ),
+                key=lambda item: str(names.get(item.campaign_id, {}).get("updated_at") or ""),
+            )[:3]
+            if apply
+            else []
+        )
         targets = [*recoverable, *waiting(states)]
         if not targets:
             raise PoolRejected("预选池里没有待参与的活动")
@@ -260,25 +268,38 @@ class RunPool:
             if not dyn_id:
                 continue
 
-            expiry = _as_time(label.get('expires_at') or label.get('deadline_at'))
-            obsolete = (str(label.get('draw_reason') or '官方抽奖已结束') if label.get('draw_state')=='ended' else
-                        'UP 已屏蔽' if label.get('blocked') else
-                        '已收存' if label.get('shelved') else
-                        '已参与' if label.get('enrolled_stage') == Stage.SETTLED.value else
-                        '已截止' if expiry and expiry <= self._clock.now() else '')
+            expiry = _as_time(label.get("expires_at") or label.get("deadline_at"))
+            obsolete = (
+                str(label.get("draw_reason") or "官方抽奖已结束")
+                if label.get("draw_state") == "ended"
+                else "UP 已屏蔽"
+                if label.get("blocked")
+                else "已收存"
+                if label.get("shelved")
+                else "已参与"
+                if label.get("enrolled_stage") == Stage.SETTLED.value
+                else "已截止"
+                if expiry and expiry <= self._clock.now()
+                else ""
+            )
             if obsolete:
-                if apply:self._settle(account_id,target,PoolState.SKIPPED,obsolete)
+                if apply:
+                    self._settle(account_id, target, PoolState.SKIPPED, obsolete)
                 skipped += 1
-                lines.append(PoolLine(target.campaign_id,dyn_id,title,PoolState.SKIPPED.value,obsolete))
+                lines.append(
+                    PoolLine(target.campaign_id, dyn_id, title, PoolState.SKIPPED.value, obsolete)
+                )
                 continue
 
             # Older versions left blocked attempts pending forever. Quarantine their
             # existing diagnosis before reserving any new attempt; explicit retry clears it.
             ready = False
-            if target in recoverable or (target.message and label.get('enrolled_stage') == Stage.BLOCKED.value):
-                message = str(label.get('enrolled_reason') or target.message)
+            if target in recoverable or (
+                target.message and label.get("enrolled_stage") == Stage.BLOCKED.value
+            ):
+                message = str(label.get("enrolled_reason") or target.message)
                 ready = False
-                if apply and hasattr(enroll, 'recheck'):
+                if apply and hasattr(enroll, "recheck"):
                     # Old queues can contain hundreds of uncertain rows. Inspect a
                     # bounded subset per round while allowing fresh rows past them.
                     if legacy_checks >= 3:
@@ -289,22 +310,33 @@ class RunPool:
                     except (MissingCredential, WriteUnavailable):
                         raise
                     except Exception as exc:
-                        if isinstance(exc, RemoteError) and exc.fault in (Fault.AUTH, Fault.RISK, Fault.RATE_LIMIT, Fault.NETWORK, Fault.TIMEOUT):
+                        if isinstance(exc, RemoteError) and exc.fault in (
+                            Fault.AUTH,
+                            Fault.RISK,
+                            Fault.RATE_LIMIT,
+                            Fault.NETWORK,
+                            Fault.TIMEOUT,
+                        ):
                             raise
-                        message = '重新核对失败：' + safe_exception(exc)
+                        message = "重新核对失败：" + safe_exception(exc)
                     else:
                         ready = bool(check.steps) and all(
-                            step.outcome.value in ('settled', 'skipped_present', 'duplicate', 'not_applicable') for _, step in check.steps
+                            step.outcome.value
+                            in ("settled", "skipped_present", "duplicate", "not_applicable")
+                            for _, step in check.steps
                         )
                         message = check.reason or message
                         if check.skipped:
-                            self._settle(account_id,target,PoolState.SKIPPED,'原动态已截止')
+                            self._settle(account_id, target, PoolState.SKIPPED, "原动态已截止")
                             skipped += 1
                             continue
                 if not ready:
-                    if apply:self._mark(account_id,target,PoolState.REVIEW,message)
+                    if apply:
+                        self._mark(account_id, target, PoolState.REVIEW, message)
                     review += 1
-                    lines.append(PoolLine(target.campaign_id,dyn_id,title,PoolState.REVIEW.value,message))
+                    lines.append(
+                        PoolLine(target.campaign_id, dyn_id, title, PoolState.REVIEW.value, message)
+                    )
                     continue
 
             if apply and self._quota is not None:
@@ -345,7 +377,10 @@ class RunPool:
                     ),
                     None,
                 )
-                if current is None or not (current.waiting or (target in recoverable and ready and current.state is PoolState.REVIEW)):
+                if current is None or not (
+                    current.waiting
+                    or (target in recoverable and ready and current.state is PoolState.REVIEW)
+                ):
                     continue
 
             if before_each and (stop := before_each(len(lines))):
@@ -360,13 +395,25 @@ class RunPool:
             except WriteUnavailable as exc:
                 raise PoolRejected(str(exc)) from exc
             except Exception as exc:
-                if isinstance(exc, RemoteError) and exc.fault in (Fault.AUTH, Fault.RISK, Fault.RATE_LIMIT, Fault.NETWORK, Fault.TIMEOUT):
+                if isinstance(exc, RemoteError) and exc.fault in (
+                    Fault.AUTH,
+                    Fault.RISK,
+                    Fault.RATE_LIMIT,
+                    Fault.NETWORK,
+                    Fault.TIMEOUT,
+                ):
                     raise
                 message = safe_exception(exc)
-                if isinstance(exc, RemoteError) and exc.fault in (Fault.REMOTE_BUSINESS, Fault.PARSE):
-                    if apply:self._mark(account_id,target,PoolState.REVIEW,message)
+                if isinstance(exc, RemoteError) and exc.fault in (
+                    Fault.REMOTE_BUSINESS,
+                    Fault.PARSE,
+                ):
+                    if apply:
+                        self._mark(account_id, target, PoolState.REVIEW, message)
                     review += 1
-                    lines.append(PoolLine(target.campaign_id,dyn_id,title,PoolState.REVIEW.value,message))
+                    lines.append(
+                        PoolLine(target.campaign_id, dyn_id, title, PoolState.REVIEW.value, message)
+                    )
                     continue
                 if self._events:
                     self._events.publish(
@@ -391,9 +438,12 @@ class RunPool:
             state, message = _outcome(report.stage)
             if report.stage is Stage.BLOCKED or (apply and report.stage is Stage.PLANNED):
                 state = PoolState.REVIEW
-                message = getattr(report, 'reason', '') or "参与未完成，需核对后重新排队"
+                message = getattr(report, "reason", "") or "参与未完成，需核对后重新排队"
             if getattr(report, "skipped", False):
-                state, message = PoolState.SKIPPED, getattr(report,'reason','') or "原动态已截止，已跳过"
+                state, message = (
+                    PoolState.SKIPPED,
+                    getattr(report, "reason", "") or "原动态已截止，已跳过",
+                )
             if report.stage in (Stage.BLOCKED, Stage.FAILED):
                 details = [
                     f"{name}：{step.message}"
@@ -403,8 +453,10 @@ class RunPool:
                 message = "；".join(details) or message
             if apply:
                 self._settle(account_id, target, state, message)
-            if any(getattr(step, 'fault', None) in (Fault.RISK, Fault.RATE_LIMIT)
-                   for _, step in getattr(report, 'steps', ())):
+            if any(
+                getattr(step, "fault", None) in (Fault.RISK, Fault.RATE_LIMIT)
+                for _, step in getattr(report, "steps", ())
+            ):
                 raise RemoteError(Fault.RISK, message)
             lines.append(PoolLine(target.campaign_id, dyn_id, title, state.value, message))
             if state is PoolState.SUCCESS:
@@ -499,10 +551,15 @@ def _outcome(stage: Stage) -> tuple[PoolState, str]:
 
 def history_pending(message: str) -> bool:
     """Only incomplete read coverage may resume; ambiguous/rejected sends may not."""
-    if message.startswith('收藏：收藏已提交，但未确认成功'):
+    if message.startswith("收藏：收藏已提交，但未确认成功"):
         return True  # Reconcile a positive read only; Journal never resends it.
-    return any(token in message for token in (
-        '转发历史核查中', '评论历史核查中',
-        '未覆盖奖品发布时间', '评论区共',
-        '参与类型已更正',
-    )) and not any(token in message for token in ('发送记录', '结果未确认', '拒绝', '风控'))
+    return any(
+        token in message
+        for token in (
+            "转发历史核查中",
+            "评论历史核查中",
+            "未覆盖奖品发布时间",
+            "评论区共",
+            "参与类型已更正",
+        )
+    ) and not any(token in message for token in ("发送记录", "结果未确认", "拒绝", "风控"))

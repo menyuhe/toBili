@@ -4,10 +4,10 @@ import json
 import threading
 import time
 
+from ..domain.errors import Fault, RemoteError
 from .lane import BusyAccount
 from .redact import safe_exception
 from .work_priority import participation_turn, requested
-from ..domain.errors import Fault, RemoteError
 
 TASKS = {
     "topics": ("话题更新", ("topic",), 60),
@@ -241,7 +241,11 @@ class TaskBook:
         admitted = 0
         cooldown = float(box.repos.settings.get(owner, "tasks.cooldown", "0"))
         if cooldown > time.time():
-            return {**result, "note": "平台请求冷却中，到时自动继续", "next_seconds": cooldown-time.time()}
+            return {
+                **result,
+                "note": "平台请求冷却中，到时自动继续",
+                "next_seconds": cooldown - time.time(),
+            }
 
         def checkpoint(index):
             nonlocal admitted
@@ -372,19 +376,39 @@ class TaskBook:
                         box.check_writer(owner)
                     if apply and scheduled:
                         from ..usecases.participation_repair import reconcile_follows
-                        repairs = reconcile_follows(box, owner, cancelled=lambda: self.stop.is_set() or not self.compatible(owner,key,config))
-                        result.update(follow_checked=repairs['checked'],follow_repaired=repairs['repaired'])
+
+                        repairs = reconcile_follows(
+                            box,
+                            owner,
+                            cancelled=lambda: (
+                                self.stop.is_set() or not self.compatible(owner, key, config)
+                            ),
+                        )
+                        result.update(
+                            follow_checked=repairs["checked"], follow_repaired=repairs["repaired"]
+                        )
                     # Explicitly selected items take priority even in catalogue mode.
-                    if apply and config['selection'] == 'catalog':
+                    if apply and config["selection"] == "catalog":
                         from ..usecases.participation_repair import recheck_catalog
-                        resumed = recheck_catalog(box,owner,cancelled=lambda: self.stop.is_set() or
-                            (scheduled and not self.compatible(owner,key,config)))
-                        result['catalog_checked'] = resumed['checked']
-                        result['catalog_ready'] = resumed['ready']
+
+                        resumed = recheck_catalog(
+                            box,
+                            owner,
+                            cancelled=lambda: (
+                                self.stop.is_set()
+                                or (scheduled and not self.compatible(owner, key, config))
+                            ),
+                        )
+                        result["catalog_checked"] = resumed["checked"]
+                        result["catalog_ready"] = resumed["ready"]
                     # Run through RunPool so progress, pause and completion stay in sync.
                     from ..usecases.pool import history_pending
-                    queued = any(item.waiting or (item.state.value == 'review' and history_pending(item.message))
-                                 for item in box.repos.pool.states(owner))
+
+                    queued = any(
+                        item.waiting
+                        or (item.state.value == "review" and history_pending(item.message))
+                        for item in box.repos.pool.states(owner)
+                    )
                     paused = box.repos.pool.paused(owner)[0]
                     queue_report = None
                     if config["selection"] == "queue" or queued or paused:
@@ -411,7 +435,7 @@ class TaskBook:
                     # errors, pause and cancellation still stop the whole round.
                     can_fill = queue_report is None or (
                         not queue_report.failed
-                        and not getattr(queue_report, 'stop_reason', '')
+                        and not getattr(queue_report, "stop_reason", "")
                         and not box.repos.pool.paused(owner)[0]
                         and not any(item.waiting for item in box.repos.pool.states(owner))
                     )
@@ -429,25 +453,42 @@ class TaskBook:
                             ),
                         )
                         note = r.stop_reason
-                        note = note or "；".join(r.problems) or (
-                            f"奖品库候选 {r.candidates} 条，完成 {r.settled} 条"
-                            if r.candidates else box.repos.campaigns.no_candidate_reason(owner, now=box.clock.now(), floor=0.8)
+                        note = (
+                            note
+                            or "；".join(r.problems)
+                            or (
+                                f"奖品库候选 {r.candidates} 条，完成 {r.settled} 条"
+                                if r.candidates
+                                else box.repos.campaigns.no_candidate_reason(
+                                    owner, now=box.clock.now(), floor=0.8
+                                )
+                            )
                         )
                         if r.blocked:
-                            reasons = list(dict.fromkeys(line.note for line in r.lines if line.stage.value == 'blocked' and line.note))
+                            reasons = list(
+                                dict.fromkeys(
+                                    line.note
+                                    for line in r.lines
+                                    if line.stage.value == "blocked" and line.note
+                                )
+                            )
                             note += f"；待处理 {r.blocked} 条"
                             if reasons:
-                                note += '：' + '；'.join(reasons[:3])[:360]
+                                note += "：" + "；".join(reasons[:3])[:360]
                         result.update(
-                            ok=result['ok'] and r.ok,
-                            scanned=result['scanned'] + r.candidates,
-                            written=result['written'] + (r.settled if apply else 0),
-                            note='；'.join(x for x in (result['note'], note) if x),
+                            ok=result["ok"] and r.ok,
+                            scanned=result["scanned"] + r.candidates,
+                            written=result["written"] + (r.settled if apply else 0),
+                            note="；".join(x for x in (result["note"], note) if x),
                         )
-                    if result.get('follow_checked'):
-                        result['note'] += f"；关注补查 {result['follow_checked']} 条，补关注 {result.get('follow_repaired', 0)} 条"
-                    if result.get('catalog_checked'):
-                        result['note'] += f"；奖品库复核 {result['catalog_checked']} 条，可接续 {result['catalog_ready']} 条"
+                    if result.get("follow_checked"):
+                        result["note"] += (
+                            f"；关注补查 {result['follow_checked']} 条，补关注 {result.get('follow_repaired', 0)} 条"
+                        )
+                    if result.get("catalog_checked"):
+                        result["note"] += (
+                            f"；奖品库复核 {result['catalog_checked']} 条，可接续 {result['catalog_ready']} 条"
+                        )
                 elif key == "results":
                     r = box.settle(owner).run(
                         owner, profile=box.repos.accounts.by_id(owner), limit=20, dry_run=False
@@ -474,8 +515,12 @@ class TaskBook:
         except RemoteError as exc:
             if exc.fault in (Fault.RISK, Fault.RATE_LIMIT, Fault.NETWORK, Fault.TIMEOUT):
                 box.repos.settings.put(owner, "tasks.cooldown", str(time.time() + 900))
-                result.update(ok=False, cooldown=True, next_seconds=900,
-                              note=f"{safe_exception(exc)}；冷却 15 分钟后按原排期继续")
+                result.update(
+                    ok=False,
+                    cooldown=True,
+                    next_seconds=900,
+                    note=f"{safe_exception(exc)}；冷却 15 分钟后按原排期继续",
+                )
             else:
                 result.update(ok=False, note=safe_exception(exc))
         except Exception as exc:
@@ -486,7 +531,14 @@ class TaskBook:
                 if key == "participate":
                     getattr(box, "pool_progress", {}).pop(owner, None)
         with self.guard:
-            if started and scheduled and apply and key == "participate" and not result["ok"] and not result.get("cooldown"):
+            if (
+                started
+                and scheduled
+                and apply
+                and key == "participate"
+                and not result["ok"]
+                and not result.get("cooldown")
+            ):
                 current = self.config(owner)
                 if self.compatible(owner, key, config):
                     for task in current["tasks"]:

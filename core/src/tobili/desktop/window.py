@@ -87,8 +87,9 @@ def run(
             # 让用户能选中正文里的字：这一页有很多"复制文案"的场景。
             text_select=True,
         )
-        if sys.platform == 'win32':
+        if sys.platform == "win32":
             from .display import attach
+
             window.events.loaded += lambda: attach(window, data)
         webview.start(
             private_mode=False,

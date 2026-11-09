@@ -12,8 +12,8 @@
 
 from __future__ import annotations
 
-import time
 import threading
+import time
 from collections.abc import Mapping
 from typing import Any
 from urllib.parse import urlsplit
@@ -175,8 +175,10 @@ def _write_json_of(reply: httpx.Response, url: str) -> dict[str, Any]:
     # The POST already left this process. An unreadable response is not evidence
     # of rejection, and must never permit an automatic repeat of that write.
     if reply.status_code in (412, 429):
-        raise AmbiguousWrite(f"提交遇到平台限制，结果待核对 {_label(url)}",
-                             fault=Fault.RISK if reply.status_code == 412 else Fault.RATE_LIMIT)
+        raise AmbiguousWrite(
+            f"提交遇到平台限制，结果待核对 {_label(url)}",
+            fault=Fault.RISK if reply.status_code == 412 else Fault.RATE_LIMIT,
+        )
     try:
         body = _json_of(reply, url)
         code = body.get("code")
@@ -185,9 +187,7 @@ def _write_json_of(reply: httpx.Response, url: str) -> dict[str, Any]:
         int(code)
         return body
     except (RemoteError, ValueError) as exc:
-        raise AmbiguousWrite(
-            f"提交响应无效，结果待核对 {_label(url)}", fault=Fault.PARSE
-        ) from exc
+        raise AmbiguousWrite(f"提交响应无效，结果待核对 {_label(url)}", fault=Fault.PARSE) from exc
 
 
 def _json_of(reply: httpx.Response, url: str) -> dict[str, Any]:

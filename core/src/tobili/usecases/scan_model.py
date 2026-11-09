@@ -74,12 +74,19 @@ class ScanModel:
                 and v in body
             }
             quote = facts.get("reward_evidence", "")
-            if "reward" in result and (not isinstance(quote, str) or not quote or quote not in body or result["reward"] not in quote):
+            if "reward" in result and (
+                not isinstance(quote, str)
+                or not quote
+                or quote not in body
+                or result["reward"] not in quote
+            ):
                 result.pop("reward", None)
             # A completed model review with no prize evidence must not resurrect
             # an unrelated product name from the local heuristic.
             result.setdefault("reward", "")
-            if result.get("action") and facts.get("kind") in {k.value for k in CampaignKind if k is not CampaignKind.INTERACTIVE}:
+            if result.get("action") and facts.get("kind") in {
+                k.value for k in CampaignKind if k is not CampaignKind.INTERACTIVE
+            }:
                 result["kind"] = facts["kind"]
         except Exception as exc:
             self.failed = True
@@ -111,6 +118,7 @@ def facts_for(item, reference, model):
     action = evidence.get("action", "")
     extracted = CampaignKind(evidence["kind"]) if evidence.get("kind") else kind_from(action)
     from ..domain.participation import requires_check_in
+
     if extracted is CampaignKind.CHECK_IN and not requires_check_in(item.text):
         extracted = kind_from(action)
     # An explicit action excerpt may identify a review candidate; it never raises its auto-write score.

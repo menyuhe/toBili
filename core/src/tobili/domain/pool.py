@@ -127,15 +127,23 @@ def apply_op(
             items[index], items[target] = items[target], items[index]
         return renumber(items)
     elif op is PoolOp.RETRY:
-        retryable = lambda row: (row.campaign_id == campaign_id and row.state in (PoolState.FAILED, PoolState.REVIEW)) if campaign_id else row.state is PoolState.FAILED
+
+        def retryable(row):
+            return (
+                (
+                    row.campaign_id == campaign_id
+                    and row.state in (PoolState.FAILED, PoolState.REVIEW)
+                )
+                if campaign_id
+                else row.state is PoolState.FAILED
+            )
+
         if not any(retryable(row) for row in items):
             raise PoolRejected("没有失败的活动需要重试")
         if campaign_id and check and (reason := check(campaign_id)):
             raise PoolRejected(reason)
         items = [
-            replace(row, state=PoolState.PENDING, message="")
-            if retryable(row)
-            else row
+            replace(row, state=PoolState.PENDING, message="") if retryable(row) else row
             for row in items
         ]
     elif op is PoolOp.CLEAR_DONE:

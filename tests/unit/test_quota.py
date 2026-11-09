@@ -41,7 +41,7 @@ def _seed(repos: Repositories, count: int = 0, *, seconds_ago: float = 60) -> in
     moment = NOW - timedelta(seconds=seconds_ago)
     for index in range(count):
         campaign_id = repos.campaigns.upsert(
-            Campaign(dyn_id=f'quota-{index}',up_uid='2002',title='奖品',kind=CampaignKind.SHARE)
+            Campaign(dyn_id=f"quota-{index}", up_uid="2002", title="奖品", kind=CampaignKind.SHARE)
         )
         repos.intents.reserve(
             account_id=account_id,

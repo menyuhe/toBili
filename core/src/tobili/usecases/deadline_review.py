@@ -79,11 +79,15 @@ def review_existing(db, now, excerpts=None):
             evidence = ""
             if row["dyn_id"] in manual:
                 state = "manual"
-            elif row['draw_business_type'] in (1,10) and row['draw_state'] in ('active','ended') and row['deadline_at']:
-                state='official'
-                candidate=row['deadline_at']
-                precision='minute'
-                evidence='官方抽奖组件'
+            elif (
+                row["draw_business_type"] in (1, 10)
+                and row["draw_state"] in ("active", "ended")
+                and row["deadline_at"]
+            ):
+                state = "official"
+                candidate = row["deadline_at"]
+                precision = "minute"
+                evidence = "官方抽奖组件"
             elif not row["body_text"]:
                 state = "no_body"
             else:

@@ -65,6 +65,7 @@ class Container:
         self.db.migrate()
         self.repos = Repositories(self.db)
         from .usecases.participation_repair import reclassify_checkins, repair_legacy_likes
+
         reclassify_checkins(self)
         repair_legacy_likes(self)
         self.clock = SystemClock()
@@ -608,7 +609,9 @@ class Container:
         # 活动是公共的（同一个活动谁都能参与），但"我参与了几条"必须按账号数 ——
         # 否则切到一个空账号，概览上还写着别人的三十条。
         account_id = current[0] if current else 0
-        total = conn.execute("SELECT COUNT(*) AS n FROM campaign c WHERE NOT EXISTS(SELECT 1 FROM catalog_removed x WHERE x.dyn_id=c.dyn_id)").fetchone()["n"]
+        total = conn.execute(
+            "SELECT COUNT(*) AS n FROM campaign c WHERE NOT EXISTS(SELECT 1 FROM catalog_removed x WHERE x.dyn_id=c.dyn_id)"
+        ).fetchone()["n"]
         open_now = conn.execute(
             "SELECT COUNT(*) AS n FROM campaign c WHERE NOT EXISTS(SELECT 1 FROM catalog_removed x WHERE x.dyn_id=c.dyn_id) AND (deadline_at IS NULL OR deadline_at > ?)",
             (_utc_stamp(self.clock),),

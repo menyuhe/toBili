@@ -143,7 +143,14 @@ class BatchEnroll:
                 break
             except Exception as exc:  # 单条炸掉不该中断整轮
                 from ..domain.errors import Fault, RemoteError
-                if isinstance(exc, RemoteError) and exc.fault in (Fault.AUTH, Fault.RISK, Fault.RATE_LIMIT, Fault.NETWORK, Fault.TIMEOUT):
+
+                if isinstance(exc, RemoteError) and exc.fault in (
+                    Fault.AUTH,
+                    Fault.RISK,
+                    Fault.RATE_LIMIT,
+                    Fault.NETWORK,
+                    Fault.TIMEOUT,
+                ):
                     raise
                 problems.append(f"{up_name or dyn_id}：{safe_exception(exc)}")
                 counts[Stage.FAILED] += 1
@@ -174,7 +181,7 @@ class BatchEnroll:
 
 
 def _note_of(report: EnrollReport) -> str:
-    if getattr(report, 'reason', ''):
+    if getattr(report, "reason", ""):
         return report.reason
     if report.stage is Stage.SETTLED and not report.steps:
         return "活动已截止，未做任何动作"

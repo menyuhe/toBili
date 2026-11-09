@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 from datetime import UTC, datetime
+
 from ...domain.draw import DrawFacts
 from ...domain.errors import Fault, RemoteError
 from . import codes, endpoints
@@ -41,12 +42,11 @@ def component(item):
 
 
 def has_component(item):
-    bid, kind, _ = component(item)
+    _bid, kind, _ = component(item)
     if kind in (10, 12):
         return True
     return any(
-        "LOTTERY" in str(n.get("type", "")).upper()
-        for n in objects(item.get("modules", {}))
+        "LOTTERY" in str(n.get("type", "")).upper() for n in objects(item.get("modules", {}))
     )
 
 

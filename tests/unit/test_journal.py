@@ -123,9 +123,11 @@ def test_success_record_precedes_unavailable_remote_probe(repos, gateway, clock,
     assert not gateway.probes and len(gateway.writes) == 1
 
 
-def test_unresolved_send_stays_blocked_even_if_remote_probe_unavailable(repos, gateway, clock, account_id):
+def test_unresolved_send_stays_blocked_even_if_remote_probe_unavailable(
+    repos, gateway, clock, account_id
+):
     journal, campaign_id, action = _setup(repos, gateway, clock, account_id)
-    gateway.receipt = Receipt.unclear('结果未知')
+    gateway.receipt = Receipt.unclear("结果未知")
     journal.attempt(account_id=account_id, campaign_id=campaign_id, action=action)
     gateway.probes.clear()
     gateway.probe = ProbeState.UNKNOWN

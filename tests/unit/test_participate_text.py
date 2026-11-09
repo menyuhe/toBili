@@ -101,20 +101,27 @@ def _text(repos, gateway=None, llm=None) -> ParticipateText:  # type: ignore[no-
 # ---- 什么算能用的评论 ----
 def test_explicit_comment_literal_keeps_product_keyword():
     from tobili.domain.participate_text import required_comment_text
-    assert required_comment_text('从评论"科睿X51"中随机抽取一位送【帆布袋】') == '科睿X51'
-    assert required_comment_text('评论区留言：“夏天快乐” 即可') == '夏天快乐'
-    assert required_comment_text('礼品【键盘】，在评论区聊聊喜欢的功能') == ''
-    assert required_comment_text('评论“红色”或者评论“蓝色”') == ''
+
+    assert required_comment_text('从评论"科睿X51"中随机抽取一位送【帆布袋】') == "科睿X51"
+    assert required_comment_text("评论区留言：“夏天快乐” 即可") == "夏天快乐"
+    assert required_comment_text("礼品【键盘】，在评论区聊聊喜欢的功能") == ""
+    assert required_comment_text("评论“红色”或者评论“蓝色”") == ""
 
 
 def test_enroll_literal_does_not_get_paraphrased_by_composer():
     from types import SimpleNamespace
+
     from tobili.usecases.enroll import Enroll
+
     class Composer:
         def draft(self, **kwargs):
-            raise AssertionError('Explicit keyword should not call model')
+            raise AssertionError("Explicit keyword should not call model")
+
     stub = SimpleNamespace(_composer=Composer())
-    assert Enroll._draft(stub, SimpleNamespace(), SimpleNamespace(text='从评论"科睿X51"中抽取')) == '科睿X51'
+    assert (
+        Enroll._draft(stub, SimpleNamespace(), SimpleNamespace(text='从评论"科睿X51"中抽取'))
+        == "科睿X51"
+    )
 
 
 def test_rejects_urls_mentions_and_template_words() -> None:

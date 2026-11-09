@@ -21,7 +21,7 @@ from ...domain.errors import Fault, MissingCredential, RemoteError
 from ...domain.probe import ProbeState
 from . import codes, endpoints
 from .http import Wire
-from .parser import epoch_of, like_status, orig_id_of, reply_mid_list
+from .parser import epoch_of, like_status, reply_mid_list
 from .reader import DynamicReader, _next_cursor
 
 _MAX_FEED_PAGES = 3
@@ -35,6 +35,7 @@ class BiliProber:
         self._uid = ""
         self.last_reason = ""
         from .history_probe import ShareHistory
+
         self._shares = ShareHistory()
         self._comments = {}
 
@@ -53,7 +54,13 @@ class BiliProber:
         except MissingCredential:
             raise
         except RemoteError as exc:
-            if exc.fault in (Fault.AUTH, Fault.RISK, Fault.RATE_LIMIT, Fault.NETWORK, Fault.TIMEOUT):
+            if exc.fault in (
+                Fault.AUTH,
+                Fault.RISK,
+                Fault.RATE_LIMIT,
+                Fault.NETWORK,
+                Fault.TIMEOUT,
+            ):
                 raise
             self.last_reason = f"查询参与状态失败（{exc.fault.value}），未重复发送"
             return ProbeState.UNKNOWN
@@ -71,8 +78,15 @@ class BiliProber:
             return self._reserved(dyn_id)
         if action is ActionKind.FAVORITE:
             from .interaction_state import favorite_state
+
             state = favorite_state(self._transport, dyn_id)
-            return ProbeState.UNKNOWN if state is None else ProbeState.PRESENT if state else ProbeState.ABSENT
+            return (
+                ProbeState.UNKNOWN
+                if state is None
+                else ProbeState.PRESENT
+                if state
+                else ProbeState.ABSENT
+            )
         if action is ActionKind.UNFOLLOW:
             return _invert(self._following(payload.get("up_uid", "")))
         if action is ActionKind.DELETE_DYN:
@@ -89,7 +103,7 @@ class BiliProber:
             query={"fid": up_uid},
             referer=f"https://space.bilibili.com/{up_uid}",
         )
-        codes.ensure_ok(payload, what='读取关注关系')
+        codes.ensure_ok(payload, what="读取关注关系")
         data = payload.get("data")
         if not isinstance(data, Mapping):
             return ProbeState.UNKNOWN
@@ -102,7 +116,7 @@ class BiliProber:
             return ProbeState.PRESENT
         if attribute in (0, 4):
             return ProbeState.ABSENT
-        self.last_reason = '关注关系不可用（可能已拉黑），请在 B 站核对'
+        self.last_reason = "关注关系不可用（可能已拉黑），请在 B 站核对"
         return ProbeState.UNKNOWN
 
     # ---- 点赞 ----
@@ -136,9 +150,14 @@ class BiliProber:
                 break
             visited.add(cursor)
             answer = self._reader._reply_page(
-                rid=rid, comment_type=comment_type, cursor=cursor,
-                page_size=_FEED_PAGE_SIZE, referer=endpoints.dyn_referer(dyn_id), resign=True,
-                strict=True, mode=2,
+                rid=rid,
+                comment_type=comment_type,
+                cursor=cursor,
+                page_size=_FEED_PAGE_SIZE,
+                referer=endpoints.dyn_referer(dyn_id),
+                resign=True,
+                strict=True,
+                mode=2,
             )
             if answer is None:
                 self.last_reason = "签名评论查询未成功，无法确认本人评论，请稍后核对"
@@ -149,17 +168,20 @@ class BiliProber:
             total = _reply_total(answer)
             if page == 0 and total is not None and total <= len(mids) and all(mids):
                 return ProbeState.ABSENT
-            data = answer.get('data') or {}
-            replies = data.get('replies') or []
-            current = {str(r.get('rpid') or r.get('rpid_str')): str(r.get('mid') or '')
-                       for r in replies if isinstance(r, Mapping) and (r.get('rpid') or r.get('rpid_str'))}
-            page_cursor = data.get('cursor') or {}
+            data = answer.get("data") or {}
+            replies = data.get("replies") or []
+            current = {
+                str(r.get("rpid") or r.get("rpid_str")): str(r.get("mid") or "")
+                for r in replies
+                if isinstance(r, Mapping) and (r.get("rpid") or r.get("rpid_str"))
+            }
+            page_cursor = data.get("cursor") or {}
             if page == 0:
                 signature = (total, tuple(current.items()))
                 cached = self._comments.get(key)
-                if cached and cached['signature'] == signature:
-                    rows.update(cached['rows'])
-                    cursor = cached['cursor']
+                if cached and cached["signature"] == signature:
+                    rows.update(cached["rows"])
+                    cursor = cached["cursor"]
                 else:
                     cursor = _next_cursor(page_cursor)
             else:
@@ -180,7 +202,8 @@ class BiliProber:
                 break
         self.last_reason = (
             f"评论历史核查中：已查 {max(len(rows), len(mids))} 条，评论区共 {total} 条，无法确认本人是否评论过"
-            if total is not None else "评论接口未提供完整数量，无法确认本人是否评论过"
+            if total is not None
+            else "评论接口未提供完整数量，无法确认本人是否评论过"
         )
         return ProbeState.UNKNOWN
 
@@ -247,8 +270,14 @@ def _reply_total(payload: Mapping[str, Any]) -> int | None:
     page = data.get("page") or data.get("cursor")
     if not isinstance(page, Mapping):
         return None
-    count = next((page[k] for k in ('count','acount','all_count') if page.get(k) is not None), None)
-    return int(count) if isinstance(count, (int, float)) and not isinstance(count, bool) and count >= 0 else None
+    count = next(
+        (page[k] for k in ("count", "acount", "all_count") if page.get(k) is not None), None
+    )
+    return (
+        int(count)
+        if isinstance(count, (int, float)) and not isinstance(count, bool) and count >= 0
+        else None
+    )
 
 
 def _reserve_state(item: Mapping[str, Any]) -> bool | None:
@@ -259,16 +288,21 @@ def _reserve_state(item: Mapping[str, Any]) -> bool | None:
     dynamic = modules.get("module_dynamic")
     if not isinstance(dynamic, Mapping):
         return None
-    for holder in (dynamic.get('additional'), dynamic.get('major'), dynamic):
-        if not isinstance(holder, Mapping):continue
-        reserve = holder.get('reserve')
-        if not isinstance(reserve, Mapping):continue
-        button = reserve.get('button')
+    for holder in (dynamic.get("additional"), dynamic.get("major"), dynamic):
+        if not isinstance(holder, Mapping):
+            continue
+        reserve = holder.get("reserve")
+        if not isinstance(reserve, Mapping):
+            continue
+        button = reserve.get("button")
         if isinstance(button, Mapping):
-            status=button.get('status')
-            if status in (1, 2) and not isinstance(status, bool):return status == 2
-        status = reserve.get('button_status')
-        if isinstance(status, bool):return status
-        if status in (1, 2):return status == 2
+            status = button.get("status")
+            if status in (1, 2) and not isinstance(status, bool):
+                return status == 2
+        status = reserve.get("button_status")
+        if isinstance(status, bool):
+            return status
+        if status in (1, 2):
+            return status == 2
     # reserve.state describes the reservation/event, not whether this account joined.
     return None

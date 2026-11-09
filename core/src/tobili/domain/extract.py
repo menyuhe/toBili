@@ -176,14 +176,15 @@ def _context_window(text: str, radius: int = 24) -> str:
 
 
 def kind_from(text: str) -> CampaignKind:
-    from .participation import requires_check_in, is_roundup
+    from .participation import is_roundup, requires_check_in
+
     if is_roundup(text):
         return CampaignKind.UNKNOWN
     if requires_check_in(text):
         return CampaignKind.CHECK_IN
     lowered = text.lower()
     # A concrete repost instruction outranks unrelated conversation in a comment section.
-    if re.search(r'(?:并|请|需|要|关注.{0,30})转发(?:本|这|此)\s*(?:条)?动态', text):
+    if re.search(r"(?:并|请|需|要|关注.{0,30})转发(?:本|这|此)\s*(?:条)?动态", text):
         return CampaignKind.SHARE
     for kind, words in _RULES:
         if any(word in lowered for word in words):

@@ -1,7 +1,8 @@
 """Refresh public component facts without any account interaction writes."""
 
-from dataclasses import replace
 import time
+from dataclasses import replace
+
 from ..domain.campaign import CampaignKind
 
 
@@ -43,7 +44,7 @@ def pending(box, size=3):
     owner = box.account()
     if not owner:
         return 0
-    if float(box.repos.settings.get(owner[0], 'tasks.cooldown', '0')) > time.time():
+    if float(box.repos.settings.get(owner[0], "tasks.cooldown", "0")) > time.time():
         return 0
     rows = (
         box.db.connect()
@@ -57,7 +58,7 @@ def pending(box, size=3):
     from ..runtime.work_priority import requested
 
     for row in rows:
-        if float(box.repos.settings.get(owner[0], 'tasks.cooldown', '0')) > time.time():
+        if float(box.repos.settings.get(owner[0], "tasks.cooldown", "0")) > time.time():
             break
         if requested(box, owner[0]):
             break

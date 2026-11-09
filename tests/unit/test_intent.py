@@ -33,7 +33,9 @@ def test_second_reserve_is_not_created(repos, account_id, clock) -> None:  # typ
     assert first == second
 
 
-def test_changed_comment_text_cannot_bypass_participation_deduplication(repos, account_id, clock) -> None:  # type: ignore[no-untyped-def]
+def test_changed_comment_text_cannot_bypass_participation_deduplication(
+    repos, account_id, clock
+) -> None:  # type: ignore[no-untyped-def]
     campaign_id = _campaign_id(repos)
     _id1, created1 = repos.intents.reserve(
         account_id=account_id,

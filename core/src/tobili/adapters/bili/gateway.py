@@ -76,10 +76,16 @@ class BiliGateway:
         return self._reader.own_shares(cursor=cursor)
 
     def share_ref(self, share_id: str) -> ShareRef:
-        from .parser import author_of, orig_id_of, dyn_id_of
+        from .parser import author_of, dyn_id_of, orig_id_of
+
         raw = self._reader.raw_detail(share_id)
         uid, _, published = author_of(raw)
-        return ShareRef(dyn_id=dyn_id_of(raw), author_uid=uid, orig_dyn_id=orig_id_of(raw), published_at=published)
+        return ShareRef(
+            dyn_id=dyn_id_of(raw),
+            author_uid=uid,
+            orig_dyn_id=orig_id_of(raw),
+            published_at=published,
+        )
 
     def lottery_notice(self, business_id: str, business_type: int = 1) -> dict | None:
         return self._reader.lottery_notice(business_id, business_type)
