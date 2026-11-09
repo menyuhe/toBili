@@ -11,7 +11,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 
 from ...container import Container
@@ -24,6 +24,22 @@ router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 
 class SwitchIn(BaseModel):
     account_id: int
+
+
+@router.get("/{account_id}/avatar")
+def avatar(account_id: int, box: Container = Depends(get_container)):
+    if account_id not in box.repos.accounts.ids():
+        raise HTTPException(404, "账号不存在")
+    profile = box.repos.accounts.by_id(account_id)
+    try:
+        data, kind = box.avatars.get(profile.avatar)
+    except (ValueError, OSError):
+        return Response(status_code=404, headers={"Cache-Control": "no-store"})
+    return Response(
+        data,
+        media_type=kind,
+        headers={"Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff"},
+    )
 
 
 @router.get("")

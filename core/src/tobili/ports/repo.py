@@ -59,6 +59,8 @@ class CampaignRepo(Protocol):
 
     def sources_of(self, campaign_id: int) -> Sequence[str]: ...
 
+    def no_candidate_reason(self, account_id: int, *, now: datetime, floor: float) -> str: ...
+
     def candidates(
         self, account_id: int, *, now: datetime, floor: float, limit: int
     ) -> Sequence[dict[str, object]]:
@@ -81,6 +83,8 @@ class EnrollmentRepo(Protocol):
 
 
 class IntentRepo(Protocol):
+    def prior_action(self, account_id: int, campaign_id: int, action: ActionKind) -> dict | None: ...
+
     def reserve(
         self,
         *,

@@ -131,7 +131,7 @@ class Settle:
                     if row.get("kind") == "reserve":
                         business_id = self._gateway.detail(str(row["dyn_id"])).reserve_id
                         business_type = 10
-                    else:
+                    elif row.get("kind") == "interactive":
                         business_id, business_type = str(row["dyn_id"]), 1
                 notice = (
                     official(business_id, business_type)

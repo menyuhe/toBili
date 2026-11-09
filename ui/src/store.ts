@@ -22,13 +22,14 @@ export const state = reactive({
   connected: false,
   guardError: '',
   overviewError: '',
-  events: [] as { seq?:number; topic: string; at: number; text: string; account_id?:number; issue?:boolean }[],
+  events: [] as { seq?:number; topic: string; at: number; text: string; account_id?:number; issue?:boolean; scope?:string }[],
   historyError: '',
   toasts: [] as Toast[],
   theme: (localStorage.getItem('tobili.theme') === 'dark' ? 'dark' : 'light') as 'dark' | 'light',
   /** 提示音开关。默认开 —— 这个工具存在的意义就是"别错过中奖"，安静才是反常。 */
   soundOn: localStorage.getItem('tobili.sound') !== '0',
   prizes: 0,
+  unreadMessages: 0,
   queueCount: null as number | null,
   /** 最近一次看到的、值钱的那几条。收件箱页拿它做角标就够了。 */
   prizeKeys: [] as string[],
@@ -99,7 +100,7 @@ export async function refreshOverview() {
     const body = await api.overview()
     if(request!==overviewRequest)return
     if(currentAccount()!==body.accounts.find(a=>a.current)?.id){
-      accountEpoch++;queueRequest++;state.queueCount=null;state.gate=null;state.quota=null;state.prizes=0;state.prizeKeys=[]
+      accountEpoch++;queueRequest++;state.queueCount=null;state.gate=null;state.quota=null;state.prizes=0;state.unreadMessages=0;state.prizeKeys=[]
     }
     state.overview = body
     state.signedIn = body.signed_in
@@ -141,11 +142,14 @@ export async function refreshAll() {
 
 const TOPIC_TEXT: Record<string, string> = {
   scan: '订阅',
+  'source.update': '订阅',
+  'result.discard': '移除',
   settle: '核验',
   llm: '模型',
   probe: '检查状态',
   write: '执行动作',
   'participation.issue': '参与待处理',
+  'participation.step': '参与步骤',
   settled: '已提交',
   duplicate: '已有记录',
   'daemon.round_done': '定时轮完成',
@@ -159,13 +163,13 @@ const TOPIC_TEXT: Record<string, string> = {
 
 export function describeEvent(topic: string, payload: Record<string, unknown>): string {
   const rawAction = String(payload.action ?? '')
-  const action = ({follow:'关注',share:'转发',comment:'评论',like:'点赞',unfollow:'取关',delete:'删除转发'} as Record<string,string>)[rawAction] ?? rawAction
+  const action = ({follow:'关注',share:'转发',comment:'评论',like:'点赞',favorite:'收藏',reserve:'预约',unfollow:'取关',delete:'删除转发',delete_dyn:'删除转发'} as Record<string,string>)[rawAction] ?? rawAction
   const dyn = String(payload.dyn_id ?? '')
   const who = String(payload.nickname ?? '')
   const title = String(payload.title ?? '')
   const account = state.overview?.accounts.find(a=>a.id===payload.account_id)
   const detail = String(payload.message || payload.error || payload.note || (payload.state==='unknown'?'无法确认是否已执行': '') || '')
-  const tail = [account?.nickname,who, action, title, dyn, detail && detail!=='OK'?detail:'', Array.isArray(payload.problems)?payload.problems.join('；'):''].filter(Boolean).join(' · ')
+  const tail = [account?.nickname,who!==account?.nickname?who:'', action, title, dyn&&!title.includes(dyn)?dyn:'', detail && detail!=='OK'&&!title.includes(detail)?detail:'', Array.isArray(payload.problems)?payload.problems.filter(p=>!title.includes(String(p))).join('；'):''].filter(Boolean).join(' · ')
   return `${TOPIC_TEXT[topic] ?? topic}${tail ? `：${tail}` : ''}`
 }
 export function isIssue(topic:string,payload:Record<string,unknown>){return payload.ok===false||payload.ambiguous===true||payload.state==='unknown'||['error','warning'].includes(String(payload.level))||topic.includes('failed')||(Array.isArray(payload.problems)&&payload.problems.length>0)}
@@ -194,6 +198,7 @@ export function startInboxWatch() {
       if(epoch!==accountEpoch||owner!==currentAccount())return
       const fresh = view.items.filter((item) => item.prize && item.unread && !known.includes(item.key))
       state.prizes = view.counts.prize
+      state.unreadMessages = view.counts.unread
       state.prizeKeys = view.items.filter((item) => item.prize).map((item) => item.key)
       if (fresh.length && previous!==undefined) {
         // 第一次拉到的历史消息不响铃 —— 刚打开软件就被过去三个月的通知轰炸，
@@ -228,7 +233,7 @@ export async function refreshHistory() {
   try {
     const data=await req<{items:{seq:number;topic:string;at:string;payload:Record<string,unknown>}[]}>('/api/history?limit=120')
     const merged=new Map<number,typeof state.events[number]>()
-    for(const row of data.items) merged.set(row.seq,{seq:row.seq,topic:row.topic,at:Date.parse(row.at)/1000,account_id:row.payload.account_id as number|undefined,text:describeEvent(row.topic,row.payload),issue:isIssue(row.topic,row.payload)})
+    for(const row of data.items) merged.set(row.seq,{seq:row.seq,topic:row.topic,at:Date.parse(row.at)/1000,account_id:row.payload.account_id as number|undefined,scope:String(row.payload.scope||''),text:describeEvent(row.topic,row.payload),issue:isIssue(row.topic,row.payload)})
     for(const row of state.events) if(row.seq)merged.set(row.seq,row)
     state.events=[...merged.values()].sort((a,b)=>b.at-a.at||(b.seq||0)-(a.seq||0)).slice(0,120)
     state.historyError=''
@@ -241,7 +246,7 @@ export function startEvents() {
   stop = listen(
     (topic, payload) => {
       const seq=Number(payload.seq)
-      if(!state.events.some(e=>e.seq===seq))state.events.unshift({ seq,topic, account_id: payload.account_id as number|undefined, at: Number(payload.at ?? Date.now() / 1000), text: describeEvent(topic, payload),issue:isIssue(topic,payload) })
+      if(!state.events.some(e=>e.seq===seq))state.events.unshift({ seq,topic, account_id: payload.account_id as number|undefined, scope:String(payload.scope||''), at: Number(payload.at ?? Date.now() / 1000), text: describeEvent(topic, payload),issue:isIssue(topic,payload) })
       if (state.events.length > 120) state.events.length = 120
       // 有写操作发生，闸门与配额的数就可能变了，顺手刷一下。
       if (topic === 'settled' || topic === 'duplicate' || topic.startsWith('daemon.')) {

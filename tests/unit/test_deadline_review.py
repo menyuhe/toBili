@@ -5,6 +5,15 @@ from tobili.domain.campaign import Campaign
 from tobili.usecases.deadline_review import infer, review_existing
 
 
+def test_draw_winners_date_is_not_retail_release_or_fake_midnight():
+    at = datetime(2026, 11, 6, 2, tzinfo=UTC)
+    result = infer("11月6日新品开售。11月23日小蛇将在评论区抽5位玩家获得游戏礼包码及挂件。", at)
+    assert result[0].date().isoformat() == "2026-11-23"
+    assert result[1] == "day"
+    assert infer("将在11月9日揪1位家人，送出电源", at)[1] == "day"
+    assert infer("11月23日晚上八点抽5位玩家获得游戏礼包码", at)[1] == "minute"
+
+
 def test_backfill_preserves_existing_and_manual_null_and_does_not_invent_clock(
     repos, clock, account_id
 ):
@@ -159,6 +168,6 @@ def test_expired_day_cannot_join_queue_or_write(repos, clock, gateway, account_i
         journal=SimpleNamespace(preflight=None),
         clock=clock,
     )
-    with pytest.raises(WriteUnavailable, match="已过开奖日期"):
-        enroll.run(account_id, "500")
+    result = enroll.run(account_id, "500")
+    assert result.skipped and result.reason == "活动奖品已截止"
     assert not gateway.writes

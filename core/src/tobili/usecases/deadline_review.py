@@ -9,6 +9,7 @@ from ..adapters.sqlite.db import parse_stamp, stamp
 from ..domain.extract import _ABS_TIME, _REL_TIME, _context_window, deadline_from
 
 CN = timezone(timedelta(hours=8))
+_DRAW = r"抽取|抽出|揭晓|(?:抽|揪)(?:取|出|选)?\s*[一二两三四五六七八九十百\d]+\s*(?:位|名|人)"
 
 
 def infer(body, published):
@@ -18,11 +19,11 @@ def infer(body, published):
     for piece in re.split(r"[。！？!？;；\n]", body):
         if re.search(r"另.{0,12}(?:直播|今晚)", piece):
             continue
-        if not re.search(r"截止|截至|开奖|抽取|抽出|揭晓", piece) or re.search(
+        if not re.search(r"截止|截至|开奖|" + _DRAW, piece) or re.search(
             r"预计|大概|左右|待定|另行|择日|上期|上次|往期|已经开奖|已开奖", piece
         ):
             continue
-        parse_text = re.sub(r"抽取|抽出|揭晓", "开奖", piece)
+        parse_text = re.sub(_DRAW, "开奖", piece)
         parse_text = re.sub(
             r"(\d{1,2}(?:[月./-]\d{1,2})?[日号]?)的(?=\s*(?:凌晨|早上|上午|中午|下午|晚上|晚间)?\d{1,2}[:：点时])",
             r"\1",
@@ -70,7 +71,7 @@ def review_existing(db, now, excerpts=None):
                 if "deadline_at" in json.loads(row["accepted"]):
                     manual.add(row["dyn"])
         for row in con.execute(
-            "SELECT id,dyn_id,body_text,published_at,deadline_at FROM campaign"
+            "SELECT id,dyn_id,body_text,published_at,deadline_at,draw_state,draw_business_type FROM campaign"
         ).fetchall():
             state = "unresolved"
             candidate = None
@@ -78,6 +79,11 @@ def review_existing(db, now, excerpts=None):
             evidence = ""
             if row["dyn_id"] in manual:
                 state = "manual"
+            elif row['draw_business_type'] in (1,10) and row['draw_state'] in ('active','ended') and row['deadline_at']:
+                state='official'
+                candidate=row['deadline_at']
+                precision='minute'
+                evidence='官方抽奖组件'
             elif not row["body_text"]:
                 state = "no_body"
             else:

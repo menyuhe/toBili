@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from ..domain.draw import DrawFacts
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,6 +20,8 @@ class FeedItem:
     up_name: str = ""
     raw_ref: str = ""
     attachments: tuple[str, ...] = ()
+    draw_hint: bool = False
+    draw: DrawFacts | None = None
 
     @property
     def has_body(self) -> bool:
@@ -75,6 +78,7 @@ class CampaignDetail:
     keywords: tuple[str, ...] = ()
     raw_ref: str = ""
     extra: dict[str, str] = field(default_factory=dict)
+    draw: DrawFacts | None = None
 
 
 @dataclass(frozen=True, slots=True)

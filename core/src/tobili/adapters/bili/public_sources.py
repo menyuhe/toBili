@@ -53,20 +53,24 @@ def opus_item(raw):
         return raw
     if not isinstance(modules, list):
         raise ValueError("Opus 正文结构变化")
-    author, pieces = {}, []
+    author, pieces, merged, cards = {}, [], {}, []
     for module in modules:
+        if not isinstance(module,dict):continue
+        merged.update(module)
         if module.get("module_author"):
             author = module["module_author"]
         for key in ("module_title", "module_content"):
             if module.get(key):
                 pieces.append(content_text(module[key]))
-    return {
-        "id_str": raw.get("id_str"),
-        "modules": {
-            "module_author": author,
-            "module_dynamic": {"desc": {"text": "\n".join(pieces)}},
-        },
-    }
+        from .official_draw import objects
+        for node in objects(module.get('module_content',{})):
+            for name in ('reserve','upower_lottery'):
+                if isinstance(node.get(name),dict):cards.append((name,node[name]))
+    dynamic=dict(merged.get('module_dynamic') or {})
+    dynamic['desc']={'text':'\n'.join(pieces)}
+    for name,card in cards:dynamic['additional']={name:card}
+    merged.update(module_author=author,module_dynamic=dynamic)
+    return {**raw,'modules':merged}
 
 
 NAV_LINK = re.compile(r"往期|上期|传送门|合集|汇总|个人主页")

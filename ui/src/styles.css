@@ -314,6 +314,7 @@ button.danger,.warning {color:var(--warn)}
 button.danger:hover:not(:disabled) {color:var(--danger);border-color:var(--danger)}
 .empty-state {padding:40px 20px;color:var(--muted);text-align:center;font-size:14px}
 .app-content > * {width:100%;max-width:1440px;margin-inline:auto}
+.app-content > .editor-workspace {max-width:none;margin-inline:0}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 @media(max-width:900px){.app-sidebar{width:168px!important}.app-content{padding:16px!important}.app-header{padding-inline:16px!important}}
 
@@ -324,12 +325,13 @@ button.danger:hover:not(:disabled) {color:var(--danger);border-color:var(--dange
 
 /* Application chrome: readable hierarchy, shared type colors, centered headers. */
 html {font-size:17px}
-th {text-align:center!important;vertical-align:middle;line-height:1.5}
+th,td {text-align:center!important;vertical-align:middle!important;line-height:1.5}
+th.cell-align-start,td.cell-align-start{text-align:left!important}
 th>div {justify-content:center}
 .ipt {min-height:38px;line-height:1.5}
 .kind-badge {display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;flex-shrink:0;min-width:54px;padding:4px 11px;border-radius:var(--radius-control);font-size:13px;font-weight:500;line-height:1.5;border:1px solid color-mix(in srgb,var(--kind-color,var(--muted)) 35%,transparent);color:var(--kind-color,var(--text-dim));background:color-mix(in srgb,var(--kind-color,var(--muted)) 13%,var(--surface))}
 .kind-share{--kind-color:var(--accent)}
-.kind-comment{--kind-color:var(--discover)}
+.kind-interactive,.kind-comment{--kind-color:var(--discover)}
 .kind-reserve{--kind-color:var(--warn)}
 .kind-check_in{--kind-color:var(--editor)}
 .kind-unknown{--kind-color:var(--muted)}
@@ -360,7 +362,7 @@ html.light{--discover-soft:#dceaff;--editor-soft:#efe1f7;--log-bg:#dae8fc}
 .workspace-tabs a{display:inline-flex;align-items:center;gap:var(--space-2);padding:12px 16px;white-space:nowrap;font-size:var(--text-control);line-height:1.5;color:var(--text-dim);border-bottom:2px solid transparent;border-radius:var(--radius-panel) var(--radius-panel) 0 0}
 .workspace-tabs a.selected{background:color-mix(in srgb,var(--section-color,var(--discover)) 14%,var(--surface));color:var(--section-color,var(--discover));border-bottom-color:var(--section-color,var(--discover));font-weight:600}
 .workspace-tabs a.risk-tab{color:var(--danger)}
-html.light .kind-share{background:#d6f1e9;color:#145f50}html.light .kind-comment{background:#dce9ff;color:#24549a}html.light .kind-reserve{background:#ffebc2;color:#805008}html.light .kind-check_in{background:#edddf8;color:#743b89}
+html.light .kind-share{background:#d6f1e9;color:#145f50}html.light .kind-interactive,html.light .kind-comment{background:#dce9ff;color:#24549a}html.light .kind-reserve{background:#ffebc2;color:#805008}html.light .kind-check_in{background:#edddf8;color:#743b89}
 
 /* Interface links use color and focus, leaving rich document formatting to the editor. */
 a {text-decoration:none}
@@ -386,3 +388,19 @@ button:disabled,button.primary:disabled,button.btn-primary:disabled,html.light b
 .deadline-mark{display:inline-block;padding:5px 7px;border-radius:var(--radius-control);white-space:nowrap}
 .deadline-urgent{background:#49303b;color:#ffb2c1}.deadline-soon{background:#403724;color:#ffd891}
 html.light .deadline-urgent{background:#ffe1e8;color:#972342}html.light .deadline-soon{background:#fff0ca;color:#77510a}
+
+/* App chrome: shared translucent surfaces; data/editing surfaces remain opaque. */
+:root{--brand:#ff98b4;--brand-soft:#3e2639;--glass:rgba(21,29,43,.88);--chrome-shadow:0 6px 25px #050c171c}
+html.light{--bg:#f3f5fa;--surface-2:#f2f5fa;--surface-3:#eaf0f8;--line:#ccd6e5;--line-soft:#e2e8f1;--brand:#b93664;--brand-soft:#ffedf3;--glass:rgba(255,255,255,.86);--discover-soft:#e7f1ff;--editor-soft:#f4eafb;--log-bg:#edf4fc;--chrome-shadow:0 6px 28px #59759714}
+.app-shell{background:radial-gradient(ellipse at 100% 0%,color-mix(in srgb,var(--brand) 9%,transparent),transparent 48%),radial-gradient(ellipse at 0% 100%,color-mix(in srgb,var(--accent) 9%,transparent),transparent 45%),var(--bg)}
+.app-sidebar,.app-header,.workspace-tabs{background:var(--glass)!important;backdrop-filter:blur(18px) saturate(135%);-webkit-backdrop-filter:blur(18px) saturate(135%);box-shadow:inset 0 1px 0 #ffffff16}
+/* Glass creates a stacking context: lift the whole header, not only its menu. */
+.app-header{position:relative;z-index:60;overflow:visible}
+.app-content{position:relative;z-index:0}
+.app-sidebar{box-shadow:1px 0 24px #0f365108}.app-sidebar>div:first-child{position:relative}.app-sidebar>div:first-child::after{content:'';position:absolute;left:20px;right:20px;bottom:-3px;height:1px;background:linear-gradient(90deg,var(--brand),transparent);opacity:.4}
+.nav-badge{margin-left:auto;display:inline-flex;align-items:center;justify-content:center;min-width:19px;height:19px;padding:0 5px;flex:none;border-radius:999px;background:#d83d68;color:#fff;font-size:11px;font-weight:650;font-variant-numeric:tabular-nums;line-height:1;box-shadow:0 0 0 2px var(--surface)}
+.workspace-tabs .nav-badge{margin-left:0}.app-sidebar .nav-active{box-shadow:inset 3px 0 var(--section-color);background:color-mix(in srgb,var(--section-color) 12%,var(--surface))}.app-sidebar .nav-item{height:40px}
+.panel{box-shadow:var(--chrome-shadow)}.panel-head{background:var(--surface-2)}.event-ribbon{border-top:2px solid var(--discover);background:var(--log-bg);max-height:330px}.event-ribbon>.task-log{padding:0;border:0;margin:0}.log-full-link{display:block;text-align:right;font-size:12px;color:var(--discover);padding:7px 0}.event-ribbon summary{font-size:12px;white-space:normal}.next-task{font-size:12px}
+button,a{transition:background-color .16s,border-color .16s,color .16s,box-shadow .16s}button:active:not(:disabled){transform:translateY(1px)}
+@media(prefers-reduced-transparency:reduce){.app-sidebar,.app-header,.workspace-tabs{background:var(--surface)!important;backdrop-filter:none}}
+@media(prefers-reduced-motion:reduce){.quick-link:hover,button:active:not(:disabled){transform:none}}

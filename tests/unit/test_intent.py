@@ -33,7 +33,7 @@ def test_second_reserve_is_not_created(repos, account_id, clock) -> None:  # typ
     assert first == second
 
 
-def test_different_fingerprint_is_a_new_intent(repos, account_id, clock) -> None:  # type: ignore[no-untyped-def]
+def test_changed_comment_text_cannot_bypass_participation_deduplication(repos, account_id, clock) -> None:  # type: ignore[no-untyped-def]
     campaign_id = _campaign_id(repos)
     _id1, created1 = repos.intents.reserve(
         account_id=account_id,
@@ -51,7 +51,8 @@ def test_different_fingerprint_is_a_new_intent(repos, account_id, clock) -> None
         content="恭喜恭喜",
         now=clock.now(),
     )
-    assert created1 and created2
+    assert created1 and not created2
+    assert _id1 == _id2
 
 
 def test_settle_updates_state(repos, account_id, clock) -> None:  # type: ignore[no-untyped-def]

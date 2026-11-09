@@ -64,6 +64,16 @@ def test_manual_draw_does_not_hit_official_or_infer_loss(repos):
     assert not repos.enrollments.settleable(owner, before=NOW)
 
 
+def test_plain_repost_without_component_does_not_call_official_api(repos):
+    owner,cid,_=_seed(repos)
+    with repos.db.write() as db:
+        db.execute("UPDATE campaign SET kind='share',draw_business_id='',draw_business_type=0 WHERE id=?",(cid,))
+    def forbidden(*a):raise AssertionError('ordinary repost is not an official lottery')
+    gateway=SimpleNamespace(lottery_notice=forbidden,scan=lambda **k:FeedSlice(items=(),cursor='',exhausted=True))
+    report=Settle(gateway=gateway,enrollments=repos.enrollments,verdicts=repos.verdicts,clock=_Clock(NOW)).run(owner,profile=PROFILE,dry_run=False)
+    assert report.checked==1 and not report.problems
+
+
 def test_service_failure_persists_cooldown_and_never_changes_verdict(repos):
     owner, cid, _ = _seed(repos)
     with repos.db.write() as con:

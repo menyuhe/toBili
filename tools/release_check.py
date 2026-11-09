@@ -65,10 +65,12 @@ TEXT = {
     ".yml",
     ".ini",
     ".cfg",
+    ".manifest",
 }
 LOGOS = {
     "ui/public/icon.png",
     "ui/public/favicon.png",
+    "ui/public/lottery-studio.png",
     "docs/public/media/discover.png",
     "docs/public/media/queue.png",
     "docs/public/media/schedule.png",

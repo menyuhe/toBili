@@ -13,8 +13,18 @@ class PrizeWorker:
 
     def run(self):
         delay = 3
+        policy_at=0
         while not self.stop.wait(delay):
             delay = 10
+            import time
+            if time.time()-policy_at>=60:
+                try:
+                    from ..usecases.catalog_policy import maintain
+                    maintain(self.box.db,self.box.clock.now())
+                except Exception:
+                    import logging
+                    logging.getLogger(__name__).exception('Catalog maintenance failed')
+                policy_at=time.time()
             if self.box.repos.settings.get(0, "prizes.enabled", "0") != "1":
                 continue
             try:

@@ -53,6 +53,10 @@ class AmbiguousWrite(RuntimeError):
     这个异常不该被捕获后重试，它应该被记录成 `UNKNOWN` 并交给下一次探测。
     """
 
+    def __init__(self, message: str, *, fault: Fault = Fault.TIMEOUT) -> None:
+        super().__init__(message)
+        self.fault = fault
+
 
 class MissingCredential(RuntimeError):
     """没有可用的登录态。调用方应引导用户重新扫码，而不是尝试用空 cookie 发请求。"""

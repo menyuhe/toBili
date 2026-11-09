@@ -338,3 +338,70 @@ def test_due_participation_runs_before_background_discovery(setup, monkeypatch):
     now[0] += 3601
     box.tasks.tick(1)
     assert calls == ["participate"]
+
+
+def test_catalog_consumes_selected_shared_items_across_rounds_without_duplicates(setup):
+    from tobili.domain.campaign import Campaign,CampaignKind
+    from tobili.domain.pool import PoolItem
+    from tobili.domain.enrollment import Stage
+    from tobili.usecases.enroll import EnrollReport
+    client,box=setup
+    ids=[box.repos.campaigns.upsert(Campaign(dyn_id=str(90000+i),up_uid='up',title='奖品',kind=CampaignKind.SHARE,confidence=0)) for i in range(43)]
+    box.repos.pool.save(1,[PoolItem(cid,i) for i,cid in enumerate(ids)],now=box.clock.now())
+    # Another account's queue must be untouched.
+    other=box.repos.accounts.upsert(AccountProfile(uid='22',nickname='B'),'b')
+    box.repos.pool.save(other,[PoolItem(ids[0])],now=box.clock.now())
+    seen=[]
+    def enroll(owner,dyn,**kw):
+        assert owner==1 and not kw['dry_run']
+        seen.append(dyn)
+        return EnrollReport(dyn,box.repos.campaigns.by_dyn(dyn)[0],1,Stage.SETTLED)
+    box._enroll=lambda owner:SimpleNamespace(run=enroll)
+    body=config(client,selection='catalog',limit=15,hourly_limit=50)
+    for expected in [15,15,13]:
+        result=TaskBook(box).run(1,'participate',body,apply=True)
+        assert result['ok'] and result['written']==expected
+    assert len(seen)==len(set(seen))==43
+    assert box.repos.pool.states(1)==[]
+    assert len(box.repos.pool.states(other))==1
+    final=TaskBook(box).run(1,'participate',body,apply=True)
+    assert final['written']==0 and '参与方式待核对' in final['note']
+
+
+def test_original_post_found_expired_is_not_reported_as_participated(setup):
+    from tobili.domain.campaign import Campaign, CampaignKind
+    from tobili.domain.pool import PoolItem
+    from tobili.domain.enrollment import Stage
+    from tobili.usecases.enroll import EnrollReport
+    client, box = setup
+    cid = box.repos.campaigns.upsert(Campaign(dyn_id='8990', up_uid='up', title='奖品', kind=CampaignKind.SHARE))
+    box.repos.pool.save(1, [PoolItem(cid)], now=box.clock.now())
+    box._enroll = lambda _: SimpleNamespace(run=lambda *a, **kw: EnrollReport('8990', cid, 1, Stage.SETTLED, skipped=True))
+    result = box.tasks.run(1, 'participate', config(client, selection='catalog'), apply=True)
+    assert result['written'] == 0 and '跳过 1' in result['note']
+    assert box.repos.pool.states(1) == []
+
+
+def test_catalog_respects_manually_paused_queue(setup):
+    client,box=setup
+    box.repos.pool.set_paused(1,True,note='手动暂停',now=box.clock.now())
+    box.batch_enroll=lambda _: (_ for _ in ()).throw(AssertionError('must not bypass pause'))
+    result=box.tasks.run(1,'participate',config(client,selection='catalog'),apply=True)
+    assert not result['ok'] and '暂停' in result['note']
+
+
+def test_queue_expired_rows_do_not_consume_live_batch_limit(setup):
+    from datetime import timedelta
+    from tobili.domain.campaign import Campaign,CampaignKind
+    from tobili.domain.pool import PoolItem
+    from tobili.domain.enrollment import Stage
+    from tobili.usecases.enroll import EnrollReport
+    client,box=setup
+    expired=[box.repos.campaigns.upsert(Campaign(dyn_id=str(7000+i),up_uid='up',title='过期',kind=CampaignKind.SHARE,deadline=box.clock.now()-timedelta(days=1))) for i in range(20)]
+    active=box.repos.campaigns.upsert(Campaign(dyn_id='8000',up_uid='up',title='未截止',kind=CampaignKind.SHARE))
+    box.repos.pool.save(1,[PoolItem(cid,i) for i,cid in enumerate([*expired,active])],now=box.clock.now())
+    seen=[]
+    box._enroll=lambda _:SimpleNamespace(run=lambda owner,dyn,**kw:seen.append(dyn) or EnrollReport(dyn,active,1,Stage.SETTLED))
+    result=box.tasks.run(1,'participate',config(client,selection='catalog',limit=1),apply=True)
+    assert result['ok'] and result['written']==1 and seen==['8000']
+    assert box.repos.pool.states(1)==[]

@@ -127,7 +127,7 @@ async function scan(history=false, feedId?:number) {
   report.value = null
   try {
     report.value = await api.scan(1, 10, history, feedId, feedId?undefined:ids)
-    toast(`命中 ${report.value.matched} 条，去重后 ${report.value.unique} 个活动${report.value.problems.length?'，部分来源未完成':''}`, report.value.problems.length?'warn':'ok')
+    toast(report.value.reused && !report.value.scanned ? '共享订阅刚刚更新或正在更新，已复用本次结果' : `命中 ${report.value.matched} 条，去重后 ${report.value.unique} 个活动${report.value.problems.length?'，部分来源未完成':''}`, report.value.problems.length?'warn':'ok')
     await load()
     await refreshAll()
   } catch (error) {
@@ -172,7 +172,7 @@ onUnmounted(()=>{if(poll)clearInterval(poll)})
   <div class="sources-layout">
     <section class="panel source-list">
       <div class="panel-head">
-        <span class="dim text-sm">{{ active.length }} 个启用 · {{ idle.length }} 个停用</span>
+        <span class="dim text-sm">{{ active.length }} 个启用 · {{ idle.length }} 个停用 <span class="chip">话题 / 合集 · 所有账号共用</span></span>
         <div class="toolbar"><button @click="directoryOpen=true">公开目录</button><button class="primary" @click="addDialog?.showModal()">添加订阅</button><button :disabled="!!busy || !visible.some(f=>f.enabled)" @click="scan(false)">{{ busy === 'scan' ? '扫描中…' : '更新当前列表' }}</button><button :disabled="!!busy || !visible.some(f=>f.enabled)" @click="scan(true)">续扫当前列表</button></div>
       </div>
       <details class="refresh-settings"><summary>自动更新 · {{refreshEnabled?'已开启，每 '+refreshMinutes+' 分钟':'未开启'}}</summary><div class="toolbar mt-3"><label><input type="checkbox" v-model="refreshEnabled" /> 自动读取来源</label><label>间隔 <select v-model.number="refreshMinutes" aria-label="来源更新间隔"><option :value="30">30 分钟</option><option :value="60">1 小时</option><option :value="180">3 小时</option><option :value="360">6 小时</option><option :value="1440">1 天</option></select></label><button :disabled="refreshBusy" @click="saveRefresh">保存</button><span class="muted text-xs">仅更新资料，不参与活动。</span></div></details>

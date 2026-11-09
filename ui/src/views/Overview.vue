@@ -1,11 +1,23 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import Icon from '../components/Icon.vue'
+import {extraNav} from '../extensions'
 import AccountBrowser from '../components/AccountBrowser.vue'
 
 import { api } from '../api'
 import { refreshAll, refreshGuard, state, toast } from '../store'
 
 const busy = ref('')
+const shortcuts=computed(()=>[
+ {to:'/campaigns',icon:'compass',label:'发现奖品',meta:'挑选新奖品',tone:'discover'},
+ {to:'/pool',icon:'queue',label:'待参与',meta:`${state.queueCount??0} 条待参与`,tone:'accent'},
+ {to:'/sources',icon:'source',label:'话题与合集',meta:'查看订阅更新',tone:'discover'},
+ {to:'/inbox',icon:'inbox',label:'消息',meta:`${state.unreadMessages||0} 条本机未看`,tone:'warn'},
+ {to:'/tidy',icon:'trash',label:'开奖清理',meta:'整理已结束记录',tone:'warn'},
+ ...extraNav.some(x=>x.to==='/digest')?[{to:'/digest',icon:'pen',label:'编稿室',meta:'整理本期奖品',tone:'editor'}]:[],
+ {to:'/standby',icon:'clock',label:'挂机中心',meta:'查看多账号排期',tone:'accent'},
+ {to:'/activity',icon:'source',label:'完整日志',meta:'每个来源的更新记录',tone:'discover'},
+])
 
 const cards = computed(() => {
   const overview = state.overview
@@ -37,7 +49,7 @@ async function scan() {
 async function settle() {
   busy.value = 'settle'
   try {
-    const report = await api.settle(false, 30)
+    const report = await api.settle(true, 30)
     toast(`核验 ${report.checked} 条，有结论 ${report.decided} 条`, 'ok')
     if (report.problems.length) toast(report.problems[0], 'warn')
     await refreshAll()
@@ -114,37 +126,15 @@ async function togglePause() {
 
     <div class="overview-columns">
       <div class="space-y-4 min-w-0">
-        <section class="panel">
-          <div class="panel-head">
-            <div>
-              <div class="text-[14.5px] font-semibold">常用操作</div>
-              
-            </div>
-          </div>
-          <div class="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <button class="action" :disabled="busy === 'scan'" @click="scan">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
-                <path d="M4 7V4h3m10 0h3v3m0 10v3h-3M7 20H4v-3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-                <path d="M8 12h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-              </svg>
-              <span class="font-medium">{{ busy === 'scan' ? '正在扫描…' : '扫描订阅源' }}</span>
-              <span class="text-[12px] muted">拉一遍关注流，识别活动奖品</span>
-            </button>
-            <button class="action" :disabled="busy === 'settle'" @click="settle">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
-                <path d="M4 12.5 9 17.5 20 6.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-              <span class="font-medium">{{ busy === 'settle' ? '正在核验…' : '核验开奖' }}</span>
-              <span class="text-[12px] muted">只读公告，有结论才落库</span>
-            </button>
-
-          </div>
+        <section class="panel quick-workspace">
+          <div class="quick-heading"><div><span class="quick-eyebrow"><Icon name="sparkles" :size="16"/> toBili WORKSPACE</span><h2>常用操作</h2></div><div class="quick-tools"><button :disabled="!!busy" @click="scan"><Icon name="refresh" :size="16"/>{{busy==='scan'?'扫描中…':'扫描订阅'}}</button><button :disabled="!!busy" @click="settle"><Icon name="gift" :size="16"/>{{busy==='settle'?'核验中…':'核验开奖'}}</button></div></div>
+          <div class="quick-grid"><RouterLink v-for="item in shortcuts" :key="item.to" :to="item.to" class="quick-link" :style="{'--quick-tone':`var(--${item.tone})`}"><span class="quick-icon"><Icon :name="item.icon" :size="23"/></span><span class="quick-copy"><strong>{{item.label}}</strong><small>{{item.meta}}</small></span><Icon class="quick-arrow" name="arrow" :size="16"/></RouterLink></div>
         </section>
 
         <section class="panel">
           <div class="panel-head">
             <div class="text-[14.5px] font-semibold">最近运行</div>
-            <span class="text-[12px] muted">来自事件流，实时</span>
+            <RouterLink class="text-[12px] muted" to="/activity">全部日志 ↗</RouterLink>
           </div>
           <div v-if="!state.events.length" class="px-4 py-10 text-center">
             <div class="text-[13.5px] muted">暂无运行记录</div>
@@ -154,7 +144,7 @@ async function togglePause() {
           </div>
           <div v-else class="divide-y" style="border-color: var(--line-soft)">
             <div
-              v-for="(event, index) in state.events.slice(0, 6)"
+              v-for="(event, index) in state.events.filter(e=>e.scope==='shared'||!e.account_id||e.account_id===state.overview?.accounts.find(a=>a.current)?.id).slice(0, 6)"
               :key="index"
               class="flex items-center gap-3 px-4 py-2.5 row-hover"
             >
@@ -210,6 +200,9 @@ async function togglePause() {
 </template>
 
 <style scoped>
+.quick-workspace{overflow:hidden}.quick-heading{position:relative;padding:22px;min-height:128px;display:flex;align-items:center;justify-content:space-between;gap:16px;background:var(--surface-2);isolation:isolate}.quick-heading::before{content:'';position:absolute;inset:0;z-index:-1;background:url('/lottery-studio.png') center/cover;opacity:.22}.light .quick-heading::before{opacity:.85}.quick-heading h2{font-size:22px;letter-spacing:-.5px;margin-top:8px}.quick-eyebrow{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:600;letter-spacing:1px;color:var(--brand)}.quick-tools{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}.quick-tools button{display:inline-flex;align-items:center;gap:6px;background:color-mix(in srgb,var(--surface) 92%,transparent);font-size:13px}.quick-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));padding:16px;gap:10px}.quick-link{display:flex;align-items:center;gap:12px;padding:14px 12px;border:1px solid var(--line-soft);border-radius:var(--radius-panel);color:var(--text);background:var(--surface);transition:transform .18s,border-color .18s,box-shadow .18s}.quick-link:hover{border-color:var(--quick-tone);transform:translateY(-2px);box-shadow:0 5px 15px color-mix(in srgb,var(--quick-tone) 12%,transparent)}.quick-icon{display:grid;place-items:center;width:43px;height:43px;border-radius:13px;flex:none;color:var(--quick-tone);background:color-mix(in srgb,var(--quick-tone) 12%,var(--surface))}.quick-copy{display:flex;flex-direction:column;gap:2px;min-width:0}.quick-copy strong{font-size:14px;font-weight:600}.quick-copy small{font-size:12px;color:var(--muted)}.quick-arrow{margin-left:auto;color:var(--muted)}
+@media(max-width:1000px){.quick-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:650px){.quick-heading{flex-wrap:wrap}.quick-grid{grid-template-columns:1fr}}
+
 .gate-message{min-height:28px;padding:3px 8px;font-size:var(--text-meta);background:var(--surface)}.gate-message-pending{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 40%,var(--line))}
 .overview-columns{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start}.overview-columns>*{min-width:0}.overview-columns .panel{min-width:0}.overview-columns .action{white-space:normal}@media(max-width:1150px){.overview-columns{grid-template-columns:minmax(0,1fr)}}
 

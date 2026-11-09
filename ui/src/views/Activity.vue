@@ -1,20 +1,14 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, watch } from 'vue'
+import { computed, ref } from 'vue'
+import TaskLog from '../components/TaskLog.vue'
 import {useRoute} from 'vue-router'
 
 import { api, req } from '../api'
-import { refreshAll, refreshHistory, state, toast, describeEvent } from '../store'
+import { refreshAll, state, toast } from '../store'
 
 const signingOut = ref(false)
 
 const route=useRoute()
-const issuesOnly=ref(route.query.issues==='1'),issueRows=ref<typeof state.events>([]),loadingIssues=ref(false)
-watch(()=>route.query.issues,()=>{issuesOnly.value=route.query.issues==='1';if(issuesOnly.value)void loadIssues()})
-async function loadIssues(more=false){loadingIssues.value=true;try{const before=more?(issueRows.value.at(-1)?.seq||0):0;const data=await req<{items:{seq:number;topic:string;at:string;payload:Record<string,unknown>}[]}>(`/api/history?issues_only=true&limit=100&before_seq=${before}`);const rows=data.items.map(r=>({seq:r.seq,topic:r.topic,at:Date.parse(r.at)/1000,text:describeEvent(r.topic,r.payload),issue:true}));issueRows.value=more?[...issueRows.value,...rows]:rows}catch(e){toast(String(e),'danger')}finally{loadingIssues.value=false}}
-function refreshLogs(){void refreshHistory();void loadIssues()}
-onMounted(()=>void loadIssues())
-const events = computed(() => issuesOnly.value?issueRows.value:state.events.filter(e=>!e.account_id||e.account_id===state.overview?.accounts.find(a=>a.current)?.id))
-
 const quota = computed(() => state.quota)
 
 const bars = computed(() => {
@@ -47,36 +41,8 @@ function clock(at: number) {
 <template>
   <div class="max-w-[1180px] grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-4 items-start">
     <section class="panel">
-      <div class="panel-head">
-        <div class="text-[14.5px] font-semibold">运行记录</div><div class="toolbar"><button class="btn" :aria-pressed="!issuesOnly" @click="issuesOnly=false">全部</button><button class="btn" :aria-pressed="issuesOnly" @click="issuesOnly=true;loadIssues()">异常 / 待核对</button><button class="btn" @click="refreshLogs">刷新</button></div>
-        <span class="chip" :class="state.connected ? 'chip-ok' : ''">
-          <span class="dot" />{{ state.connected ? '已连接' : '重连中' }}
-        </span>
-      </div>
-
-      <p v-if="state.historyError" class="warning">{{state.historyError}}</p>
-      <div v-if="!events.length" class="px-5 py-14 text-center">
-        <div class="text-[13.5px] muted">还没有事件</div>
-      </div>
-
-      <div v-else class="px-5 py-4">
-        <div class="relative pl-4" style="border-left: 1px solid var(--line)">
-          <div v-for="(event, index) in events" :key="index" class="relative pb-3 last:pb-0">
-            <span
-              class="absolute -left-[21px] top-[5px] w-[7px] h-[7px] rounded-full ring-2"
-              :style="{
-                background: event.topic === 'settled' ? 'var(--ok)' : event.topic.includes('fail') ? 'var(--danger)' : 'var(--accent)',
-                '--tw-ring-color': 'var(--surface)',
-              }"
-            />
-            <div class="flex items-baseline gap-2.5">
-              <span class="text-[11.5px] muted tabular-nums w-[62px] flex-none">{{ clock(event.at) }}</span>
-              <span class="text-[13.5px] flex-1 event-text" :class="{'event-issue':event.issue}">{{ event.text }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div v-if="issuesOnly&&issueRows.length" class="p-4"><button :disabled="loadingIssues" @click="loadIssues(true)">更早记录</button></div>
+      <div class="panel-head"><h2>运行记录</h2><span class="chip" :class="state.connected?'chip-ok':''"><span class="dot"/>{{state.connected?'已连接':'重连中'}}</span></div>
+      <TaskLog :issues="route.query.issues==='1'"/>
     </section>
 
     <aside class="space-y-4">

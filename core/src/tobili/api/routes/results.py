@@ -23,6 +23,32 @@ from ..deps import get_container
 router = APIRouter(prefix="/api", tags=["results"])
 
 
+@router.get('/results/discarded')
+def discarded(box: Container = Depends(get_container)):
+    from .schedule import owner
+    rows=box.db.connect().execute('''SELECT d.*,c.reward,c.dyn_id FROM result_dismissal d
+        JOIN campaign c ON c.id=d.campaign_id WHERE d.account_id=? ORDER BY d.at DESC''',(owner(box),)).fetchall()
+    return {'items':[dict(r) for r in rows]}
+
+
+class DiscardIn(BaseModel):
+    account_id: int
+
+
+@router.post('/results/{campaign_id}/discard')
+def discard_result(campaign_id: int, body: DiscardIn, box: Container = Depends(get_container)):
+    from ...usecases.discard_result import discard
+    from .schedule import owner
+    key=owner(box,body.account_id)
+    try:
+        with box.lanes.exclusive(key):
+            return discard(box,key,campaign_id)
+    except BusyAccount as exc:
+        raise HTTPException(409,str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(400,safe_exception(exc)) from exc
+
+
 @router.get("/results")
 def result_list(
     query: str = "",

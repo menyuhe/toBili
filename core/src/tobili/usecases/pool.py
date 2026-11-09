@@ -3,8 +3,7 @@
 分成两个用例是因为它们的失败方式完全不同：
 
 - `ManagePool` 只动本地数据，失败就是参数不对，改一下再来。
-- `RunPool` 会往外写（转发、评论），一条失败必须整队停下 —— 见 `domain/pool.py`
-  里那三条规则。
+- `RunPool` 会往外写（转发、评论）；单条证据不足进入待处理，执行异常暂停队列。
 
 跑队列刻意做成**同步、逐条、可预演**。老版本就是这样的：一轮十几条，每条之间本来
 就有间隔，做成后台任务只会多一层"它到底在跑还是在卡着"的不确定性。
@@ -18,7 +17,7 @@ from datetime import datetime
 from time import sleep
 
 from ..domain.enrollment import Stage
-from ..domain.errors import WriteUnavailable
+from ..domain.errors import WriteUnavailable, MissingCredential, RemoteError, Fault
 from ..domain.pool import (
     POOL_LIMIT,
     PoolItem,
@@ -112,6 +111,8 @@ class ManagePool:
             return "这条活动已移到往期架，请先取回"
         if self._campaigns.blocked(str(row.get("up_uid") or "")):
             return "该 UP 已列入黑名单"
+        if row.get('draw_state') in ('ended','unverified','unsupported'):
+            return str(row.get('draw_reason') or '官方抽奖已结束或参与方式待核对')
         deadline = _as_time(row.get("expires_at") or row.get("deadline_at"))
         if deadline is not None and deadline <= now:
             return f"{row.get('title') or '这条活动'}：已经过开奖时间了"
@@ -179,10 +180,12 @@ class PoolRunReport:
     joined: int = 0
     skipped: int = 0
     failed: int = 0
+    review: int = 0
     pending: int = 0
     paused: bool = False
     note: str = ""
     lines: tuple[PoolLine, ...] = field(default=())
+    stop_reason: str = ""
 
 
 class RunPool:
@@ -229,20 +232,25 @@ class RunPool:
         if paused and apply:
             raise PoolRejected(f"预选池已暂停（{note or '手动暂停'}），先点继续再来")
 
-        targets = waiting(self._pool.states(account_id))
-        if limit > 0:
-            targets = targets[:limit]
+        names = {int(row["campaign_id"]): row for row in self._pool.items(account_id)}
+        states = self._pool.states(account_id)
+        recoverable = sorted(
+            (item for item in states if item.state is PoolState.REVIEW and history_pending(item.message)),
+            key=lambda item: str(names.get(item.campaign_id, {}).get('updated_at') or ''),
+        )[:3] if apply else []
+        targets = [*recoverable, *waiting(states)]
         if not targets:
             raise PoolRejected("预选池里没有待参与的活动")
 
         enroll = self._enroll()
 
-        names = {int(row["campaign_id"]): row for row in self._pool.items(account_id)}
         lines: list[PoolLine] = []
-        joined = skipped = failed = 0
+        joined = skipped = failed = review = work_attempts = legacy_checks = 0
         stop = ""
 
         for target in targets:
+            if limit > 0 and work_attempts >= limit:
+                break
             if cancelled and cancelled():
                 stop = "任务已停止"
                 break
@@ -251,6 +259,53 @@ class RunPool:
             dyn_id = str(label.get("dyn_id") or "")
             if not dyn_id:
                 continue
+
+            expiry = _as_time(label.get('expires_at') or label.get('deadline_at'))
+            obsolete = (str(label.get('draw_reason') or '官方抽奖已结束') if label.get('draw_state')=='ended' else
+                        'UP 已屏蔽' if label.get('blocked') else
+                        '已收存' if label.get('shelved') else
+                        '已参与' if label.get('enrolled_stage') == Stage.SETTLED.value else
+                        '已截止' if expiry and expiry <= self._clock.now() else '')
+            if obsolete:
+                if apply:self._settle(account_id,target,PoolState.SKIPPED,obsolete)
+                skipped += 1
+                lines.append(PoolLine(target.campaign_id,dyn_id,title,PoolState.SKIPPED.value,obsolete))
+                continue
+
+            # Older versions left blocked attempts pending forever. Quarantine their
+            # existing diagnosis before reserving any new attempt; explicit retry clears it.
+            ready = False
+            if target in recoverable or (target.message and label.get('enrolled_stage') == Stage.BLOCKED.value):
+                message = str(label.get('enrolled_reason') or target.message)
+                ready = False
+                if apply and hasattr(enroll, 'recheck'):
+                    # Old queues can contain hundreds of uncertain rows. Inspect a
+                    # bounded subset per round while allowing fresh rows past them.
+                    if legacy_checks >= 3:
+                        continue
+                    legacy_checks += 1
+                    try:
+                        check = enroll.recheck(account_id, dyn_id)
+                    except (MissingCredential, WriteUnavailable):
+                        raise
+                    except Exception as exc:
+                        if isinstance(exc, RemoteError) and exc.fault in (Fault.AUTH, Fault.RISK, Fault.RATE_LIMIT, Fault.NETWORK, Fault.TIMEOUT):
+                            raise
+                        message = '重新核对失败：' + safe_exception(exc)
+                    else:
+                        ready = bool(check.steps) and all(
+                            step.outcome.value in ('settled', 'skipped_present', 'duplicate', 'not_applicable') for _, step in check.steps
+                        )
+                        message = check.reason or message
+                        if check.skipped:
+                            self._settle(account_id,target,PoolState.SKIPPED,'原动态已截止')
+                            skipped += 1
+                            continue
+                if not ready:
+                    if apply:self._mark(account_id,target,PoolState.REVIEW,message)
+                    review += 1
+                    lines.append(PoolLine(target.campaign_id,dyn_id,title,PoolState.REVIEW.value,message))
+                    continue
 
             if apply and self._quota is not None:
                 gate = self._quota.check(account_id)
@@ -290,11 +345,12 @@ class RunPool:
                     ),
                     None,
                 )
-                if current is None or not current.waiting:
+                if current is None or not (current.waiting or (target in recoverable and ready and current.state is PoolState.REVIEW)):
                     continue
 
             if before_each and (stop := before_each(len(lines))):
                 break
+            work_attempts += 1
             try:
                 if self._progress:
                     self._progress(
@@ -304,7 +360,14 @@ class RunPool:
             except WriteUnavailable as exc:
                 raise PoolRejected(str(exc)) from exc
             except Exception as exc:
+                if isinstance(exc, RemoteError) and exc.fault in (Fault.AUTH, Fault.RISK, Fault.RATE_LIMIT, Fault.NETWORK, Fault.TIMEOUT):
+                    raise
                 message = safe_exception(exc)
+                if isinstance(exc, RemoteError) and exc.fault in (Fault.REMOTE_BUSINESS, Fault.PARSE):
+                    if apply:self._mark(account_id,target,PoolState.REVIEW,message)
+                    review += 1
+                    lines.append(PoolLine(target.campaign_id,dyn_id,title,PoolState.REVIEW.value,message))
+                    continue
                 if self._events:
                     self._events.publish(
                         "participation.issue",
@@ -326,6 +389,11 @@ class RunPool:
                 break
 
             state, message = _outcome(report.stage)
+            if report.stage is Stage.BLOCKED or (apply and report.stage is Stage.PLANNED):
+                state = PoolState.REVIEW
+                message = getattr(report, 'reason', '') or "参与未完成，需核对后重新排队"
+            if getattr(report, "skipped", False):
+                state, message = PoolState.SKIPPED, getattr(report,'reason','') or "原动态已截止，已跳过"
             if report.stage in (Stage.BLOCKED, Stage.FAILED):
                 details = [
                     f"{name}：{step.message}"
@@ -335,11 +403,16 @@ class RunPool:
                 message = "；".join(details) or message
             if apply:
                 self._settle(account_id, target, state, message)
+            if any(getattr(step, 'fault', None) in (Fault.RISK, Fault.RATE_LIMIT)
+                   for _, step in getattr(report, 'steps', ())):
+                raise RemoteError(Fault.RISK, message)
             lines.append(PoolLine(target.campaign_id, dyn_id, title, state.value, message))
             if state is PoolState.SUCCESS:
                 joined += 1
             elif state is PoolState.SKIPPED:
                 skipped += 1
+            elif state is PoolState.REVIEW:
+                review += 1
             elif state is PoolState.FAILED:
                 failed += 1
                 stop = f"{title} 失败：{message}"
@@ -351,7 +424,7 @@ class RunPool:
         paused_now, _ = self._pool.paused(account_id)
         remaining = len(waiting(self._pool.states(account_id)))
         note_text = stop or (
-            f"跑了 {len(lines)} 条：成功 {joined}、跳过 {skipped}、失败 {failed}，还剩 {remaining} 条"
+            f"处理 {len(lines)} 条：成功 {joined}、待处理 {review}、跳过 {skipped}、失败 {failed}，待参与 {remaining} 条"
         )
         if self._progress:
             self._progress(account_id, "")
@@ -361,10 +434,12 @@ class RunPool:
             joined=joined,
             skipped=skipped,
             failed=failed,
+            review=review,
             pending=remaining,
             paused=paused_now,
             note=note_text,
             lines=tuple(lines),
+            stop_reason=stop,
         )
 
     def _settle(self, account_id: int, target: PoolItem, state: PoolState, message: str) -> None:
@@ -411,13 +486,23 @@ class RunPool:
 def _outcome(stage: Stage) -> tuple[PoolState, str]:
     """报名结果 → 池子里的状态。
 
-    `planned` 是"报了但没做完"，不是失败 —— 它值得下次再试一次，所以留在池子里
-    继续等，不让整队停下。
+    预演保持 pending；真实执行的未完成项由调用方转入 review。
     """
     if stage is Stage.SETTLED:
         return PoolState.SUCCESS, "已参与"
     if stage is Stage.BLOCKED:
-        return PoolState.PENDING, "需要核对，暂留待参与"
+        return PoolState.REVIEW, "参与未完成，需核对后重新排队"
     if stage is Stage.PLANNED:
         return PoolState.PENDING, "还没做完，下次继续"
     return PoolState.FAILED, "参与失败"
+
+
+def history_pending(message: str) -> bool:
+    """Only incomplete read coverage may resume; ambiguous/rejected sends may not."""
+    if message.startswith('收藏：收藏已提交，但未确认成功'):
+        return True  # Reconcile a positive read only; Journal never resends it.
+    return any(token in message for token in (
+        '转发历史核查中', '评论历史核查中',
+        '未覆盖奖品发布时间', '评论区共',
+        '参与类型已更正',
+    )) and not any(token in message for token in ('发送记录', '结果未确认', '拒绝', '风控'))

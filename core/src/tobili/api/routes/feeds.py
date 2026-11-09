@@ -211,4 +211,5 @@ def scan(
         "model_calls": report.model_calls,
         "model_cache_hits": report.model_cache_hits,
         "model_extracted": report.model_extracted,
+        "reused": report.reused,
     }

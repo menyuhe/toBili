@@ -57,6 +57,9 @@ def main() -> int:
     output = stage / "output"
     private = (ROOT / "core/src/tobili/private_pack.py").is_file()
     name = "toBili-Pro" if private else NAME
+    from release_version import validate_bundle, windows_resource
+    version = validate_bundle(ROOT)
+    resource = windows_resource(stage / 'version-info.txt', name, version)
     icon = make_icon(stage / f"{name}.ico")
     args = [
         sys.executable,
@@ -73,6 +76,10 @@ def main() -> int:
         *(["--add-data", f"{ROOT / 'core/src/tobili/assets'};tobili/assets"] if private else []),
         "--icon",
         str(icon),
+        "--version-file",
+        str(resource),
+        "--manifest",
+        str(ROOT / 'tools/windows.manifest'),
         "--add-data",
         f"{icon}{';' if sys.platform == 'win32' else ':'}ui/dist",
         # 绝对路径：加 --specpath 之后相对路径会按 spec 所在目录解析，踩过一次。

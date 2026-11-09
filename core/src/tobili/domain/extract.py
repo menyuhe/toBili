@@ -15,11 +15,9 @@ from ..domain.campaign import CampaignKind
 _SHARE_WORDS = ("转发", "转发抽", "抽奖", "转抽", "转+评", "转评")
 _COMMENT_WORDS = ("评论抽", "评论区", "留言", "评论里")
 _RESERVE_WORDS = ("预约", "预约抽奖", "开售提醒")
-_CHECKIN_WORDS = ("签到", "打卡", "每日")
 
 _RULES = (
     (CampaignKind.RESERVE, _RESERVE_WORDS),
-    (CampaignKind.CHECK_IN, _CHECKIN_WORDS),
     (CampaignKind.COMMENT, _COMMENT_WORDS),
     (CampaignKind.SHARE, _SHARE_WORDS),
 )
@@ -27,7 +25,7 @@ _RULES = (
 _DEADLINE_HINT = re.compile(r"(截止|截至|开奖|结束|到\s*期|有效期)")
 _ABS_TIME = re.compile(
     r"(?:(20\d{2})\s*[年./-]\s*)?(\d{1,2})\s*[月./-]\s*(\d{1,2})\s*[日号]?"
-    r"(?:\s*[（(]?\s*(?:凌晨|早上|上午|中午|下午|晚上|晚间)?\s*(\d{1,2})\s*[:：点时]\s*(\d{2})?\s*分?)?"
+    r"(?:\s*[（(]?\s*(?:凌晨|早上|上午|中午|下午|晚上|晚间)?\s*(\d{1,2}|[零一二两三四五六七八九十]{1,3})\s*[:：点时]\s*(半|\d{1,2}|[零一二三四五六七八九十]{1,3})?\s*分?)?"
 )
 _REL_DATE = r"大后天|今天|今日|今晚|明天|明日|明晚|后天|(?:本|这|下下|下)?(?:周|星期|礼拜)[一二三四五六日天1-7]|[一二两三四五六七八九十\d]+天后"
 _REL_TIME = re.compile(
@@ -43,7 +41,7 @@ _PRIZE = re.compile(r"(?:送|抽|奖|瓜分|领取|获得)\s*[^，。！？\n]{2
 
 def _clamp_deadline(value: datetime, now: datetime) -> datetime | None:
     """跨年修正：只说「1月5日」而当前已是 12 月时，应当指明年。"""
-    if value < now - timedelta(days=1):
+    if value < now - timedelta(days=1) and now.month >= 10 and value.month <= 3:
         try:
             return value.replace(year=value.year + 1)
         except ValueError:
@@ -128,8 +126,8 @@ def deadline_from(text: str, *, now: datetime, allow_relative: bool = True) -> d
     year, month, day, hour, minute = match.groups()
     try:
         resolved_year = int(year) if year else now.year
-        hours = int(hour) if hour else 23
-        minutes = int(minute or 0) if hour else 59
+        hours = _number(hour) if hour else 23
+        minutes = (30 if minute == "半" else _number(minute or "0")) if hour else 59
         if hours > 24 or (hours == 24 and minutes != 0):
             return None
         if hour and hours < 12 and re.search(r"下午|晚上|晚间", match.group(0)):
@@ -178,7 +176,15 @@ def _context_window(text: str, radius: int = 24) -> str:
 
 
 def kind_from(text: str) -> CampaignKind:
+    from .participation import requires_check_in, is_roundup
+    if is_roundup(text):
+        return CampaignKind.UNKNOWN
+    if requires_check_in(text):
+        return CampaignKind.CHECK_IN
     lowered = text.lower()
+    # A concrete repost instruction outranks unrelated conversation in a comment section.
+    if re.search(r'(?:并|请|需|要|关注.{0,30})转发(?:本|这|此)\s*(?:条)?动态', text):
+        return CampaignKind.SHARE
     for kind, words in _RULES:
         if any(word in lowered for word in words):
             return kind

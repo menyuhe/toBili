@@ -5,6 +5,10 @@ from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
+# Compatible with older readers: explicitly retract an unsubstantiated prize
+# without deleting the activity or any account's participation history.
+UNVERIFIED_REWARD = "奖品待核对"
+
 
 class PublicPrize(BaseModel):
     model_config = ConfigDict(extra="forbid")

@@ -9,7 +9,8 @@ import IconButton from '../components/IconButton.vue'
 import ParticipationPace from '../components/ParticipationPace.vue'
 const paceOpen=ref(false),loadError=ref('')
 
-const STATE_LABEL: Record<string,string>={pending:'待参与',running:'进行中',success:'已完成',skipped:'已跳过',failed:'失败'}
+const STATE_LABEL: Record<string,string>={pending:'待参与',running:'进行中',success:'已完成',skipped:'已跳过',failed:'失败',review:'待处理'}
+const listMode=ref<'pending'|'review'>('pending')
 const owner=currentAccount()
 const view=ref<PoolView>({items:[],paused:false,note:'',counts:{},limit:200})
 const report=ref<PoolRunReport|null>(null),busy=ref(''),organizing=ref(false)
@@ -18,6 +19,8 @@ const pausing=ref(false)
 async function pauseRun(){pausing.value=true;try{accept(await api.editPool({operation:'pause'}))}catch(error){toast(error instanceof Error?error.message:'暂停失败','danger')}finally{pausing.value=false}}
 let generation=0,poll:ReturnType<typeof setInterval>|undefined
 const counts=computed(()=>view.value.counts)
+const reviewCount=computed(()=>(counts.value.review||0)+(counts.value.failed||0))
+const visibleItems=computed(()=>view.value.items.filter(row=>listMode.value==='review'?['review','failed'].includes(row.state):!['review','failed'].includes(row.state)))
 const hasFailed=computed(()=>(counts.value.failed||0)>0)
 const waiting=computed(()=>(counts.value.pending||0)+(counts.value.running||0))
 const finished=computed(()=>(counts.value.success||0)+(counts.value.skipped||0))
@@ -44,12 +47,12 @@ onUnmounted(()=>{generation++;if(poll)clearInterval(poll)})
 <div class="planning-layout">
   <Modal v-if="paceOpen" title="参与节奏" @close="paceOpen=false"><ParticipationPace/></Modal>
   <aside class="panel queue-panel">
-    <div class="panel-head"><h2>待参与 <span class="queue-count">{{waiting}}</span></h2><div class="toolbar"><button @click="paceOpen=true">参与节奏</button><button :aria-pressed="organizing" @click="organizing=!organizing">{{organizing?'完成整理':'整理'}}</button></div></div>
-    <div class="queue-actions"><button class="primary" :disabled="!!busy||!!view.progress||!waiting||view.paused" @click="run">{{busy==='run'||view.progress?'执行中…':'开始参与'}}</button><button v-if="busy==='run'||view.progress" :disabled="pausing||view.paused" @click="pauseRun">{{view.paused?'正在暂停…':'暂停'}}</button></div>
+    <div class="panel-head"><h2>参与队列</h2><div class="toolbar"><button @click="paceOpen=true">参与节奏</button><button :aria-pressed="organizing" @click="organizing=!organizing">{{organizing?'完成整理':'整理'}}</button></div></div>
+    <div class="queue-actions"><button :aria-pressed="listMode==='pending'" @click="listMode='pending'">待参与 {{waiting}}</button><button :aria-pressed="listMode==='review'" @click="listMode='review'">待处理 {{reviewCount}}</button><button class="primary" :disabled="!!busy||!!view.progress||!waiting||view.paused" @click="run">{{busy==='run'||view.progress?'执行中…':'开始参与'}}</button><button v-if="busy==='run'||view.progress" :disabled="pausing||view.paused" @click="pauseRun">{{view.paused?'正在暂停…':'暂停'}}</button></div>
     <div v-if="view.progress" class="queue-progress" role="status">{{view.progress}}</div>
     <div v-if="view.paused" class="queue-warning"><strong>队列已暂停</strong><p class="text-xs mt-1">{{view.note||'手动暂停'}}</p><div class="toolbar mt-2"><button v-if="hasFailed" :disabled="!!busy" @click="edit('retry')">重试失败</button><button :disabled="!!busy" @click="edit('resume')">继续</button></div></div>
-    <p v-if="loadError" class="queue-warning" role="alert">{{loadError}}</p><div class="queue-items"><p v-if="!view.items.length" class="empty-state">从发现奖品加入待参与</p>
-      <div v-for="(row,index) in view.items" :key="row.campaign_id" class="queue-item"><span class="queue-index">{{index+1}}</span><div class="min-w-0 flex-1"><a class="queue-title" :href="'https://www.bilibili.com/opus/'+row.dyn_id" target="_blank" rel="noreferrer">{{row.reward||'奖品待核对'}}</a><div class="queue-meta"><span>{{row.up_name}}</span><BlockAuthor :uid="row.up_uid" :name="row.up_name" @saved="load(true)"/><span>· {{when(row.deadline)}}</span><PrizeEditor :id="row.campaign_id" @saved="load(true)"/></div><span v-if="row.state!=='pending'" class="chip" :class="row.state==='failed'?'chip-danger':'chip-ok'">{{STATE_LABEL[row.state]||row.state}}</span><p v-if="row.message" class="text-xs warning mt-1">{{row.message}}</p><div v-if="organizing" class="toolbar mt-2"><button :disabled="!!busy||index===0" @click="edit('move',{campaign_id:row.campaign_id,direction:-1})">上移</button><button :disabled="!!busy||index===view.items.length-1" @click="edit('move',{campaign_id:row.campaign_id,direction:1})">下移</button></div></div><IconButton icon="close" :disabled="!!busy" :label="'移出待参与：'+(row.reward||'奖品待补全')" @click="edit('remove',{campaign_id:row.campaign_id})"/></div>
+    <p v-if="loadError" class="queue-warning" role="alert">{{loadError}}</p><div class="queue-items"><p v-if="!visibleItems.length" class="empty-state">{{listMode==='review'?'没有待处理项':'从发现奖品加入待参与'}}</p>
+      <div v-for="(row,index) in visibleItems" :key="row.campaign_id" class="queue-item"><span class="queue-index">{{row.position+1}}</span><div class="min-w-0 flex-1"><a class="queue-title" :href="'https://www.bilibili.com/opus/'+row.dyn_id" target="_blank" rel="noreferrer">{{row.reward||'奖品待核对'}}</a><div class="queue-meta"><span>{{row.up_name}}</span><BlockAuthor :uid="row.up_uid" :name="row.up_name" @saved="load(true)"/><span>· {{when(row.deadline)}}</span><PrizeEditor :id="row.campaign_id" @saved="load(true)"/></div><span v-if="row.state!=='pending'" class="chip" :class="['failed','review'].includes(row.state)?'chip-warn':'chip-ok'">{{STATE_LABEL[row.state]||row.state}}</span><p v-if="row.message" class="text-xs warning mt-1">{{row.message}}</p><div v-if="listMode==='review'" class="toolbar mt-2"><button :disabled="!!busy" @click="edit('retry',{campaign_id:row.campaign_id})">重新排队</button></div><div v-if="organizing && listMode==='pending'" class="toolbar mt-2"><button :disabled="!!busy||row.position===0" @click="edit('move',{campaign_id:row.campaign_id,direction:-1})">上移</button><button :disabled="!!busy||row.position===view.items.length-1" @click="edit('move',{campaign_id:row.campaign_id,direction:1})">下移</button></div></div><IconButton icon="close" :disabled="!!busy" :label="'移出待参与：'+(row.reward||'奖品待补全')" @click="edit('remove',{campaign_id:row.campaign_id})"/></div>
     </div>
     <details class="queue-more"><summary>队列操作</summary><div class="toolbar mt-3"><button :disabled="!!busy||view.paused" @click="edit('pause')">暂停</button><button :disabled="!!busy||!hasFailed" @click="edit('retry')">重试失败</button><button :disabled="!!busy||!finished" @click="clearDone">移除已完成 / 跳过</button><button v-if="report" @click="resultDialog?.showModal()">上次结果</button></div></details>
   </aside>

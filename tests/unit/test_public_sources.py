@@ -104,7 +104,8 @@ def test_collection_latest_resumes_without_consuming_history(repos, gateway, clo
     scanner.run(account_id, feed_id=feed)
     scanner.run(account_id, feed_id=feed)
     scanner.run(account_id, feed_id=feed)
-    assert calls == ["", "article:1:70:hash:10", ""]
+    # Resume unfinished pages immediately, then reuse the completed shared update.
+    assert calls == ["", "article:1:70:hash:10"]
 
 
 def test_topic_url_and_collection_uid_validation():

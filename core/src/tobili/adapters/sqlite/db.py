@@ -90,7 +90,12 @@ class Database:
                 raise SchemaTooNew(current, SCHEMA_VERSION)
             conn.executescript(DDL)
             self._fill_columns(conn)
-            conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
+            with self.write():
+                if int(conn.execute("PRAGMA user_version").fetchone()[0]) < 15:
+                    from .shared_feeds import migrate
+
+                    migrate(conn)
+                conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         return SCHEMA_VERSION
 
     def _fill_columns(self, conn: sqlite3.Connection) -> None:

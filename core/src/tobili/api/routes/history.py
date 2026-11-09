@@ -16,6 +16,20 @@ from ..deps import get_container
 
 router = APIRouter(prefix="/api/history", tags=["history"])
 
+
+@router.get('/attention')
+def attention(box: Container = Depends(get_container)):
+    account = box.account()
+    if not account:
+        return {'account_id':0,'results':0}
+    owner = account[0]
+    count = box.db.connect().execute("""SELECT count(DISTINCT e.campaign_id) FROM enrollment e
+      LEFT JOIN participation_ref r ON r.campaign_id=e.campaign_id AND r.account_id=e.account_id
+      LEFT JOIN result_probe p ON p.campaign_id=e.campaign_id AND p.account_id=e.account_id
+      WHERE e.account_id=? AND NOT EXISTS(SELECT 1 FROM result_dismissal d WHERE d.account_id=e.account_id AND d.campaign_id=e.campaign_id)
+      AND (r.link_state IN ('candidate','conflict') OR p.error='缺少 UP 信息')""",(owner,)).fetchone()[0]
+    return {'account_id':owner,'results':count}
+
 # 这些主题是"发生了什么"，值得留在历史里。`probe` 太吵（每条动作两次），
 # 默认不返回，但可以通过 topics 参数显式要。
 TOPICS = (
@@ -30,6 +44,8 @@ TOPICS = (
     "notify",
     "schedule.round",
     "participation.issue",
+    "source.update",
+    "result.discard",
 )
 
 
@@ -39,9 +55,16 @@ def history(
     topics: str = Query(default="", description="逗号分隔，留空用默认集合"),
     issues_only: bool = False,
     before_seq: int = 0,
+    category: str = "",
     box: Container = Depends(get_container),
 ) -> dict[str, object]:
-    wanted = tuple(t.strip() for t in topics.split(",") if t.strip()) or TOPICS
+    categories = {
+        'sources': ('source.update', 'scan'),
+        'participation': ('enroll','write','participation.issue','schedule.round'),
+        'results': ('settle','verdict.override','tidy.run','tidy.blocked','result.discard'),
+        'model': ('llm',),
+    }
+    wanted = categories.get(category) or tuple(t.strip() for t in topics.split(",") if t.strip()) or TOPICS
     account = box.account()
     rows = box.repos.events.recent(
         limit=limit,

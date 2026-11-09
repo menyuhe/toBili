@@ -145,7 +145,20 @@ def test_summarize_counts_every_state() -> None:
     assert counts["pending"] == 1
     assert counts["failed"] == 1
     assert counts["success"] == 0
-    assert set(counts) == {"pending", "running", "success", "skipped", "failed"}
+    assert set(counts) == {"pending", "running", "success", "skipped", "failed", "review"}
+
+
+def test_review_requires_targeted_manual_retry():
+    rows=[PoolItem(1,0,PoolState.REVIEW,'评论状态无法确认'),PoolItem(2,1,PoolState.REVIEW,'需要人工参与'),PoolItem(3,2)]
+    assert _ids(waiting(rows))==[3]
+    changed=apply_op(rows,PoolOp.RETRY,campaign_id=1)
+    assert _ids(waiting(changed))==[1,3]
+    assert changed[0].message=='' and changed[1]==rows[1]
+
+
+def test_review_does_not_occupy_pending_capacity():
+    rows=[PoolItem(i,i,PoolState.REVIEW,'待核对') for i in range(POOL_LIMIT)]
+    assert apply_op(rows,PoolOp.ADD,campaign_ids=[999])[-1].waiting
 
 
 def test_unknown_operation_is_rejected() -> None:

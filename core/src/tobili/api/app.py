@@ -19,6 +19,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from ..container import Container
+from .. import __version__
 from .routes import (
     accounts,
     auth,
@@ -101,7 +102,7 @@ def create_app(home: str | None = None, *, bundle: str | Path | None = None) -> 
 
     app = FastAPI(
         title="toBili",
-        version="0.1.0",
+        version=__version__,
         description="B 站抽奖活动管理工具",
         lifespan=lifespan,
     )

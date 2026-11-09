@@ -54,6 +54,12 @@ class SourceRefresh:
             return
 
         def due(feed):
+            if feed["kind"] in ("topic", "collection"):
+                return max(
+                    float(feed.get("next_scan_at", 0)),
+                    float(box.repos.settings.get(0, "sources.shared.next_slot", "0")),
+                    float(box.repos.settings.get(owner, f"sources.due.{feed['id']}", "0")),
+                )
             try:
                 return float(box.repos.settings.get(owner, f"sources.due.{feed['id']}", "0"))
             except ValueError:
@@ -75,7 +81,13 @@ class SourceRefresh:
                 "note": feed.get("label") or feed["target"],
                 "since": box.clock.now().isoformat(),
             }
-            report = box.scan_feeds(owner).run(owner, feed_id=int(feed["id"]), pages=1, per_feed=5)
+            report = box.scan_feeds(owner).run(
+                owner,
+                feed_id=int(feed["id"]),
+                pages=1,
+                per_feed=5,
+                **({"automatic": True} if feed["kind"] in ("topic", "collection") else {}),
+            )
             interval = max(
                 30, min(1440, int(box.repos.settings.get(owner, "sources.interval", "60")))
             )

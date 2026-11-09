@@ -16,6 +16,8 @@ def main():
     if sys.platform != "darwin":
         raise SystemExit("macOS 安装包必须在 Mac 或 macOS 构建机上生成")
     from PIL import Image
+    from release_version import validate_bundle
+    version = validate_bundle(ROOT)
 
     private = (ROOT / "core/src/tobili/private_pack.py").is_file()
     name = "toBili-Pro" if private else "toBili"
@@ -80,6 +82,8 @@ def main():
     value = plistlib.loads(info.read_bytes())
     value.update(
         CFBundleDisplayName=name.replace("-", " "),
+        CFBundleShortVersionString=version,
+        CFBundleVersion=version,
         NSHighResolutionCapable=True,
         LSMinimumSystemVersion="15.0",
         NSAppTransportSecurity={"NSAllowsLocalNetworking": True},

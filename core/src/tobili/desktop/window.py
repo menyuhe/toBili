@@ -78,15 +78,18 @@ def run(
         )
     say(f"窗口地址：{url}")
     try:
-        webview.create_window(
+        window = webview.create_window(
             title,
             url,
             width=_WIDTH,
             height=_HEIGHT,
-            min_size=(1040, 700),
+            min_size=(800, 520),
             # 让用户能选中正文里的字：这一页有很多"复制文案"的场景。
             text_select=True,
         )
+        if sys.platform == 'win32':
+            from .display import attach
+            window.events.loaded += lambda: attach(window, data)
         webview.start(
             private_mode=False,
             storage_path=str(profile.resolve()),

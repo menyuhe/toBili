@@ -12,10 +12,10 @@
 
 1. **顺序是人工的，不按截止时间重排。** 自动排序是扫描的事；人手把某一条挪到
    第一位，是因为他知道那条今天开奖。系统不要在这种事上自作聪明。
-2. **一条失败就整队停。** 一条出错通常意味着"需要人看一眼"，继续往下做只会把
-   同一个错误再犯一遍。这也是池里要保留失败行的原因。
-3. **状态只有五个，没有"重试中"。** 重试是动作，不是状态 —— 把重试做成状态，
-   就会留下"卡在重试中"的僵尸行。
+2. **单条证据不足转入待处理。** 保留原因、不占待参与容量；
+   账号或平台级异常仍暂停队列，避免把同一个错误继续扩散。
+3. **只读历史核查可以续查。** 每轮最多续查三条，证据完整才继续原参与；
+   已发送但结果未知、业务拒绝和人工任务仍须手动处理，不自动重发。
 
 本模块是纯函数：读进来一批行，算出新的一批。落库在 `PoolRepo`，跑在 `RunPool`。
 """
@@ -36,6 +36,7 @@ class PoolState(StrEnum):
     SUCCESS = "success"
     SKIPPED = "skipped"
     FAILED = "failed"
+    REVIEW = "review"
 
 
 # 这两个状态意味着"这条已经不需要再动了"。跑完就删，不留历史 ——
@@ -106,7 +107,7 @@ def apply_op(
             items.append(PoolItem(campaign_id=cid))
             known.add(cid)
             added += 1
-        if len(items) > POOL_LIMIT:
+        if sum(row.waiting for row in items) > POOL_LIMIT:
             raise PoolRejected(f"预选池最多 {POOL_LIMIT} 条，请先清理已完成项")
         if not added and campaign_ids:
             raise PoolRejected("这些活动都已经在预选池里了")
@@ -126,11 +127,14 @@ def apply_op(
             items[index], items[target] = items[target], items[index]
         return renumber(items)
     elif op is PoolOp.RETRY:
-        if not any(row.state is PoolState.FAILED for row in items):
+        retryable = lambda row: (row.campaign_id == campaign_id and row.state in (PoolState.FAILED, PoolState.REVIEW)) if campaign_id else row.state is PoolState.FAILED
+        if not any(retryable(row) for row in items):
             raise PoolRejected("没有失败的活动需要重试")
+        if campaign_id and check and (reason := check(campaign_id)):
+            raise PoolRejected(reason)
         items = [
             replace(row, state=PoolState.PENDING, message="")
-            if row.state is PoolState.FAILED
+            if retryable(row)
             else row
             for row in items
         ]

@@ -176,6 +176,7 @@ export interface ExecReport {
 }
 
 export interface ScanReport {
+  reused?: number
   feeds: number
   scanned: number
   matched: number
@@ -268,6 +269,7 @@ export interface PoolRunReport {
   joined: number
   skipped: number
   failed: number
+  review: number
   pending: number
   paused: boolean
   note: string
@@ -276,6 +278,9 @@ export interface PoolRunReport {
 
 /** 活动库里的一行：活动本身 + 我的报名 + 开奖结论 + 清理状态。 */
 export interface CampaignRow {
+  draw_state?: string
+  draw_reason?: string
+  draw_business_type?: number
   deadline_date?: string | null
   expires_at?: string | null
   shelf_reason: string|null

@@ -65,7 +65,7 @@ def test_model_evidence_cache_fallback_and_latest_scan(repos, gateway, clock, ac
 
     def chat(*args, **kwargs):
         calls.append(1)
-        return '{"reward":"画册","deadline":"凭空编的时间","action":"转发"}'
+        return '{"reward":"画册","reward_evidence":"转发抽奖，奖品为画册，数量两本","deadline":"凭空编的时间","action":"转发"}'
 
     model = ScanModel(SimpleNamespace(chat=chat, describe=lambda: {"model": "fixture"}), repos.db)
     item = FeedItem(dyn_id="77", up_uid="12", text="转发抽奖，奖品为画册，数量两本")
@@ -127,6 +127,7 @@ def test_configured_http_model_extracts_only_evidence_and_never_raises_write_con
             assert "画册" in content["messages"][-1]["content"]
             result = {
                 "reward": "画册",
+                "reward_evidence": "写下你的答案，有机会赢取奖品画册",
                 "kind": "comment",
                 "action": "写下你的答案",
                 "deadline": "不存在的时间",

@@ -131,6 +131,7 @@ def attachments_of(item: Mapping[str, Any]) -> tuple[str, ...]:
 
 
 def to_feed_item(item: Mapping[str, Any]) -> FeedItem | None:
+    from .official_draw import has_component
     subject = subject_of(item)
     dyn_id = dyn_id_of(subject)
     if not dyn_id:
@@ -144,6 +145,7 @@ def to_feed_item(item: Mapping[str, Any]) -> FeedItem | None:
         up_name=name,
         raw_ref=f"https://www.bilibili.com/opus/{dyn_id}",
         attachments=attachments_of(subject),
+        draw_hint=has_component(subject) or '互动抽奖' in text_of(subject),
     )
 
 

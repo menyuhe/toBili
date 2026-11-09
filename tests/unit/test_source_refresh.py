@@ -48,8 +48,9 @@ def test_day_of_refresh_keeps_accounts_independent_and_delays_failures(
     from tobili.ports.models import AccountProfile
 
     other = repos.accounts.upsert(AccountProfile(uid="222", nickname="second"), "second")
-    repos.feeds.add(account_id, "collection", "1", "limited")
-    repos.feeds.add(other, "topic", "2", "healthy")
+    # Personal UP dynamics remain account scoped; shared topics have separate tests.
+    repos.feeds.add(account_id, "space", "1", "limited")
+    repos.feeds.add(other, "space", "2", "healthy")
     for owner in (account_id, other):
         repos.settings.put(owner, "sources.refresh", "1")
     now = [1_800_000_000.0]

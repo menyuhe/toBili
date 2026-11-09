@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 16
 
 # 后加的列。`CREATE TABLE IF NOT EXISTS` 不会改动已存在的表，老库要靠 ALTER 补。
 # (表名, 列名, 声明) —— 全是常量，不拼接外部输入。
@@ -23,6 +23,9 @@ ADDED_COLUMNS = (
     ("campaign", "reward_status", "TEXT NOT NULL DEFAULT 'pending'"),
     ("campaign", "draw_business_id", "TEXT NOT NULL DEFAULT ''"),
     ("campaign", "draw_business_type", "INTEGER NOT NULL DEFAULT 0"),
+    ("campaign", "draw_state", "TEXT NOT NULL DEFAULT ''"),
+    ("campaign", "draw_checked_at", "TEXT NOT NULL DEFAULT ''"),
+    ("campaign", "draw_reason", "TEXT NOT NULL DEFAULT ''"),
     ("account", "level", "INTEGER NOT NULL DEFAULT 0"),
     ("tidy_plan", "note", "TEXT NOT NULL DEFAULT ''"),
     ("tidy_plan", "finished_at", "TEXT"),
@@ -68,6 +71,16 @@ CREATE TABLE IF NOT EXISTS result_probe (
     attempted_at TEXT NOT NULL,
     retry_at TEXT NOT NULL,
     error TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY(account_id,campaign_id)
+);
+CREATE TABLE IF NOT EXISTS result_dismissal (
+    account_id INTEGER NOT NULL REFERENCES account(id),
+    campaign_id INTEGER NOT NULL REFERENCES campaign(id),
+    reason TEXT NOT NULL,
+    share_id TEXT NOT NULL DEFAULT '',
+    state TEXT NOT NULL DEFAULT 'pending',
+    note TEXT NOT NULL DEFAULT '',
+    at TEXT NOT NULL,
     PRIMARY KEY(account_id,campaign_id)
 );
 CREATE TABLE IF NOT EXISTS participation_ref (
@@ -117,6 +130,11 @@ CREATE TABLE IF NOT EXISTS feed (
     UNIQUE (account_id, kind, target)
 );
 CREATE INDEX IF NOT EXISTS ix_feed_owner ON feed(account_id, enabled);
+CREATE TABLE IF NOT EXISTS feed_refresh (
+    feed_id INTEGER PRIMARY KEY REFERENCES feed(id) ON DELETE CASCADE,
+    next_at REAL NOT NULL DEFAULT 0,
+    last_finished REAL NOT NULL DEFAULT 0
+);
 
 CREATE TABLE IF NOT EXISTS campaign (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -309,5 +327,16 @@ CREATE TABLE IF NOT EXISTS inbox_seen (
 CREATE TABLE IF NOT EXISTS feed_health (
     feed_id INTEGER PRIMARY KEY REFERENCES feed(id) ON DELETE CASCADE,
     attempted_at TEXT NOT NULL, error TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS catalog_removed (
+    dyn_id TEXT PRIMARY KEY, reason TEXT NOT NULL, removed_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS deadline_override (
+    campaign_id INTEGER PRIMARY KEY REFERENCES campaign(id) ON DELETE CASCADE,
+    value TEXT NOT NULL, at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS deadline_origin (
+    campaign_id INTEGER PRIMARY KEY REFERENCES campaign(id) ON DELETE CASCADE,
+    source TEXT NOT NULL, value TEXT NOT NULL
 );
 """

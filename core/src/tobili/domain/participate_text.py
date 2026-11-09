@@ -27,6 +27,21 @@ from enum import StrEnum
 MAX_LEN = 60
 MIN_LEN = 4
 
+
+def required_comment_text(body: str) -> str:
+    """Only an explicitly quoted comment instruction is a mandatory literal.
+
+    Product descriptions and quoted prize names are not comment instructions.
+    Keep the literal intact rather than asking a model to paraphrase it.
+    """
+    matches = re.findall(
+        r'(?:评论(?:区)?(?:中)?(?:留言|回复|输入)?|留言|回复)'
+        r'\s*(?:关键词|口令|内容)?\s*[:：]?\s*[“"「『【]([^”"」』】\n]{1,60})[”"」』】]',
+        body or '',
+    )
+    unique = list(dict.fromkeys(x.strip() for x in matches if x.strip()))
+    return unique[0] if len(unique) == 1 else ''
+
 # 老版本只跳过前 5 条。前几条通常是 UP 置顶和自己人，照抄风险高；太靠后
 # 又多是"我也是""蹲一个"。这个窗口是它的经验值，保留。
 SKIP_HEAD = 5
@@ -155,7 +170,8 @@ def llm_messages(*, up_name: str, title: str, body: str) -> list[dict[str, str]]
         "3. 最多一个感叹号，最多一个表情。\n"
         "4. 必须贴着正文里提到的具体内容说一句（比如提到的作品、角色、时间、奖品），"
         "不要空泛夸「支持」「加油」。\n"
-        "5. 只输出评论正文本身。不要引号，不要解释，不要换行。"
+        "5. 正文明确要求评论特定关键词时原样保留；要求回答问题时回答该问题，不要只夸奖品。\n"
+        "6. 只输出评论正文本身。不要引号，不要解释，不要换行。"
     )
     excerpt = " ".join((body or "").split())[:500]
     user = f"UP 主：{up_name or '未知'}\n动态标题：{title or '（无标题）'}\n正文：{excerpt}"

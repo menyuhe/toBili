@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from urllib.parse import parse_qs, urlsplit
 
@@ -32,6 +33,7 @@ class FeedView:
     last_scan_at: str | None
     error: str = ""
     attempted_at: str | None = None
+    shared: bool = False
 
 
 class ManageFeeds:
@@ -57,14 +59,25 @@ class ManageFeeds:
             # 不区分"不存在"和"不属于你"，避免变成一个探测别人订阅源的工具。
             raise FeedRejected(f"订阅源 {feed_id} 不存在")
 
+    @contextmanager
+    def _edit(self, feed_id):
+        guard = getattr(self._feeds, "edit_guard", None)
+        try:
+            with guard(feed_id) if guard else nullcontext():
+                yield
+        except ValueError as exc:
+            raise FeedRejected(str(exc)) from exc
+
     def remove(self, account_id: int, feed_id: int) -> None:
         """停用。暂时不看它，但配置留着 —— 和 delete 是两件事。"""
         self._own(account_id, feed_id)
-        self._feeds.disable(feed_id)
+        with self._edit(feed_id):
+            self._feeds.disable(feed_id)
 
     def enable(self, account_id: int, feed_id: int) -> None:
         self._own(account_id, feed_id)
-        self._feeds.enable(feed_id)
+        with self._edit(feed_id):
+            self._feeds.enable(feed_id)
 
     def rename(self, account_id: int, feed_id: int, label: str) -> None:
         self._own(account_id, feed_id)
@@ -76,12 +89,14 @@ class ManageFeeds:
         row = next((r for r in self._feeds.list_for(account_id) if int(r["id"]) == feed_id), None)
         kind = str(row["kind"]) if row else ""
         target = str(row["target"]) if row else ""
-        self._feeds.rename(feed_id, cleaned or KIND_DEFAULT_LABEL.get(kind) or target)
+        with self._edit(feed_id):
+            self._feeds.rename(feed_id, cleaned or KIND_DEFAULT_LABEL.get(kind) or target)
 
     def delete(self, account_id: int, feed_id: int) -> None:
         """真的删掉。已经发现的活动不受影响，只是"从哪看到的"这条线断了。"""
         self._own(account_id, feed_id)
-        self._feeds.delete(feed_id)
+        with self._edit(feed_id):
+            self._feeds.delete(feed_id)
 
 
 def clean(kind: str, target: str) -> tuple[str, str]:
@@ -134,4 +149,5 @@ def to_view(row: dict[str, object]) -> FeedView:
         last_scan_at=str(last) if last else None,
         error=str(row.get("error") or ""),
         attempted_at=str(row.get("attempted_at") or "") or None,
+        shared=row.get("kind") in ("topic", "collection"),
     )

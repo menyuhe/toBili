@@ -10,8 +10,14 @@ from tobili.desktop import window
 
 def test_native_window_keeps_profile_across_restarts(tmp_path, monkeypatch):
     starts, windows, stopped = [], [], []
+    class Loaded:
+        def __iadd__(self, handler):
+            return self
+    def create_window(*a, **k):
+        windows.append((a, k))
+        return SimpleNamespace(events=SimpleNamespace(loaded=Loaded()))
     fake = SimpleNamespace(
-        create_window=lambda *a, **k: windows.append((a, k)), start=lambda **kw: starts.append(kw)
+        create_window=create_window, start=lambda **kw: starts.append(kw)
     )
     monkeypatch.setitem(sys.modules, "webview", fake)
     bundle = tmp_path / "bundle"

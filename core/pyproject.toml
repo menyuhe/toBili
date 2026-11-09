@@ -1,6 +1,6 @@
 [project]
 name = "tobili-core"
-version = "0.1.0"
+version = "0.2.18"
 description = "toBili 核心：领域模型、适配器与用例"
 requires-python = ">=3.12"
 license = { text = "AGPL-3.0-or-later" }

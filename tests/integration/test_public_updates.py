@@ -7,6 +7,21 @@ from services.public_catalog.server import create_app
 from tobili.usecases.public_updates import apply_page
 
 
+def test_retracted_prize_stays_unknown_and_manual_edits_survive(repos, clock):
+    from tobili.publicwire import UNVERIFIED_REWARD
+    box = SimpleNamespace(db=repos.db, repos=repos, clock=clock)
+    p = prize()
+    apply_page(box, dict(items=[p], next=1, more=False), 0)
+    p['reward'] = UNVERIFIED_REWARD
+    apply_page(box, dict(items=[p], next=2, more=False), 1)
+    row = repos.db.connect().execute('SELECT reward,reward_status FROM campaign').fetchone()
+    assert tuple(row) == ('', 'unknown')
+    with repos.db.write() as c:
+        c.execute("UPDATE campaign SET reward='人工奖品',reward_status='manual',reward_locked=1")
+    apply_page(box, dict(items=[p], next=3, more=False), 2)
+    assert repos.db.connect().execute('SELECT reward FROM campaign').fetchone()[0] == '人工奖品'
+
+
 def prize(**changes):
     return dict(
         dyn_id="12345",

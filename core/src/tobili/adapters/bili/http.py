@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import time
+import threading
 from collections.abc import Mapping
 from typing import Any
 from urllib.parse import urlsplit
@@ -43,6 +44,7 @@ class Wire:
         self._step = step
         self._gap = gap
         self._stamped = 0.0
+        self._pace_lock = threading.Lock()
         self._session = httpx.Client(timeout=patience, follow_redirects=False)
 
     # ---- 生命周期 ----
@@ -93,6 +95,7 @@ class Wire:
     ) -> dict[str, Any]:
         trouble: RemoteError | None = None
         for turn in range(self._attempts + 1):
+            self._pace()
             try:
                 reply = self._session.get(url, params=query, headers=self._heads(referer))
             except httpx.TimeoutException as exc:
@@ -106,6 +109,12 @@ class Wire:
                     trouble = RemoteError(
                         Fault.NETWORK,
                         f"上游 {reply.status_code} {_label(url)}",
+                        code=reply.status_code,
+                    )
+                elif reply.status_code in (412, 429):
+                    raise RemoteError(
+                        Fault.RISK if reply.status_code == 412 else Fault.RATE_LIMIT,
+                        f"平台暂时限制请求 HTTP {reply.status_code} {_label(url)}",
                         code=reply.status_code,
                     )
                 elif reply.status_code >= 400:
@@ -135,7 +144,7 @@ class Wire:
             reply = self._session.post(url, data=form, headers=self._heads(referer))
         except httpx.HTTPError as exc:
             raise AmbiguousWrite(f"提交结果未知 {_label(url)}") from exc
-        return _json_of(reply, url)
+        return _write_json_of(reply, url)
 
     def submit_json(
         self,
@@ -150,15 +159,35 @@ class Wire:
             reply = self._session.post(url, json=body, params=query, headers=self._heads(referer))
         except httpx.HTTPError as exc:
             raise AmbiguousWrite(f"提交结果未知 {_label(url)}") from exc
-        return _json_of(reply, url)
+        return _write_json_of(reply, url)
 
     def _pace(self) -> None:
-        """两次写之间拉开距离。不是可调优化项，是避免风控的必要间隔。"""
-        if self._stamped:
-            waited = time.monotonic() - self._stamped
-            if waited < self._gap:
-                time.sleep(self._gap - waited)
-        self._stamped = time.monotonic()
+        """Space request starts, including reads, retries and read-after-write checks."""
+        with self._pace_lock:
+            if self._stamped:
+                waited = time.monotonic() - self._stamped
+                if waited < self._gap:
+                    time.sleep(self._gap - waited)
+            self._stamped = time.monotonic()
+
+
+def _write_json_of(reply: httpx.Response, url: str) -> dict[str, Any]:
+    # The POST already left this process. An unreadable response is not evidence
+    # of rejection, and must never permit an automatic repeat of that write.
+    if reply.status_code in (412, 429):
+        raise AmbiguousWrite(f"提交遇到平台限制，结果待核对 {_label(url)}",
+                             fault=Fault.RISK if reply.status_code == 412 else Fault.RATE_LIMIT)
+    try:
+        body = _json_of(reply, url)
+        code = body.get("code")
+        if isinstance(code, bool) or not isinstance(code, (int, str)):
+            raise ValueError("missing business code")
+        int(code)
+        return body
+    except (RemoteError, ValueError) as exc:
+        raise AmbiguousWrite(
+            f"提交响应无效，结果待核对 {_label(url)}", fault=Fault.PARSE
+        ) from exc
 
 
 def _json_of(reply: httpx.Response, url: str) -> dict[str, Any]:

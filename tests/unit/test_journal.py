@@ -110,3 +110,24 @@ def test_events_are_published(repos, gateway, clock, account_id) -> None:  # typ
 
     topics = [e.topic for e in bus.since(0)]
     assert topics == ["probe", "write"]
+
+
+def test_success_record_precedes_unavailable_remote_probe(repos, gateway, clock, account_id):
+    journal, campaign_id, action = _setup(repos, gateway, clock, account_id)
+    journal.attempt(account_id=account_id, campaign_id=campaign_id, action=action)
+    gateway.probes.clear()
+    gateway.probe = ProbeState.UNKNOWN
+    second = journal.attempt(account_id=account_id, campaign_id=campaign_id, action=action)
+    inspected = journal.inspect(account_id=account_id, campaign_id=campaign_id, action=action)
+    assert second.outcome is Outcome.DUPLICATE and inspected.outcome is Outcome.DUPLICATE
+    assert not gateway.probes and len(gateway.writes) == 1
+
+
+def test_unresolved_send_stays_blocked_even_if_remote_probe_unavailable(repos, gateway, clock, account_id):
+    journal, campaign_id, action = _setup(repos, gateway, clock, account_id)
+    gateway.receipt = Receipt.unclear('结果未知')
+    journal.attempt(account_id=account_id, campaign_id=campaign_id, action=action)
+    gateway.probes.clear()
+    gateway.probe = ProbeState.UNKNOWN
+    step = journal.attempt(account_id=account_id, campaign_id=campaign_id, action=action)
+    assert step.outcome is Outcome.UNKNOWN and not gateway.probes and len(gateway.writes) == 1

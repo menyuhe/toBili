@@ -10,12 +10,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
+from .draw import DrawFacts
 
 
 class CampaignKind(StrEnum):
     """参与方式。`UNKNOWN` 是合法值，表示"看出来了是活动，但没看懂怎么参加"。"""
 
     SHARE = "share"
+    INTERACTIVE = "interactive"  # Presentation grouping for verified business_type=1.
     COMMENT = "comment"
     RESERVE = "reserve"
     CHECK_IN = "check_in"
@@ -38,6 +40,7 @@ class Campaign:
     published_at: datetime | None = None
     body_text: str = ""
     tags: tuple[str, ...] = field(default=())
+    draw: DrawFacts | None = None
 
     def __post_init__(self) -> None:
         if not self.dyn_id:
@@ -47,6 +50,8 @@ class Campaign:
 
     def is_open(self, now: datetime) -> bool:
         """截止时间未知时按"仍然开放"处理；已知且已过则关闭。"""
+        if self.draw and (self.draw.state != 'active' or (self.draw.deadline and now >= self.draw.deadline)):
+            return False
         return self.deadline is None or now < self.deadline
 
     def minutes_left(self, now: datetime) -> int | None:

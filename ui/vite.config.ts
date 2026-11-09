@@ -1,8 +1,11 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import { readFileSync } from 'node:fs'
+const version = readFileSync(new URL('../core/src/tobili/__init__.py', import.meta.url), 'utf8').match(/__version__ = "([^"]+)"/)![1]
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [vue(), {name:'release-version', generateBundle(){this.emitFile({type:'asset',fileName:'version.json',source:JSON.stringify({version})})}}],
+  define: { __APP_VERSION__: JSON.stringify(version) },
   // 打包后由 FastAPI 同源托管，用相对路径省掉"部署在子路径"时的麻烦。
   base: './',
   server: {

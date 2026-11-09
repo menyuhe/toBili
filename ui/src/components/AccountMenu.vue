@@ -12,6 +12,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { api, type AccountRow } from '../api'
 import { refreshAll, state, toast } from '../store'
 import QrLogin from './QrLogin.vue'
+import AccountAvatar from './AccountAvatar.vue'
 import { canChangeAccount } from '../workGuard'
 
 const open = ref(false)
@@ -22,8 +23,6 @@ const root = ref<HTMLElement | null>(null)
 const rows = computed<AccountRow[]>(() => state.overview?.accounts ?? [])
 const current = computed(() => rows.value.find((row) => row.current) ?? null)
 const avatarUrl = computed(() => current.value?.avatar ?? '')
-const initial = computed(() => (current.value?.nickname || '?').slice(0, 1))
-const broken = ref(false)
 
 /** 副标题。uid 太短时脱敏结果就是 `***`，那对辨认没有任何帮助，干脆不显示。 */
 function sub(row: AccountRow) {
@@ -34,7 +33,6 @@ function sub(row: AccountRow) {
 
 function toggle() {
   open.value = !open.value
-  if (open.value) broken.value = false
 }
 
 function close(event: MouseEvent) {
@@ -104,22 +102,7 @@ onUnmounted(() => document.removeEventListener('click', close))
         <div class="text-[13.5px] font-medium">{{ current?.nickname }}</div>
         <div class="text-[11.5px] muted">Lv.{{ current?.level }}</div>
       </div>
-      <img
-        v-if="avatarUrl && !broken"
-        :src="avatarUrl"
-        alt=""
-        referrerpolicy="no-referrer"
-        class="w-8 h-8 rounded-full object-cover flex-none"
-        style="border: 1px solid var(--line)"
-        @error="broken = true"
-      />
-      <div
-        v-else
-        class="w-8 h-8 rounded-full grid place-items-center text-[13px] font-semibold flex-none"
-        style="background: var(--accent-soft); color: var(--accent)"
-      >
-        {{ initial }}
-      </div>
+      <AccountAvatar :src="avatarUrl" :name="current?.nickname || '?'" />
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" class="flex-none muted">
         <path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
       </svg>
@@ -139,16 +122,7 @@ onUnmounted(() => document.removeEventListener('click', close))
           :class="{ 'account-on': row.current, 'account-bad': !row.ready }"
           @click="pick(row)"
         >
-          <div class="avatar">
-            <img
-              v-if="row.avatar && row.ready"
-              :src="row.avatar"
-              alt=""
-              referrerpolicy="no-referrer"
-              @error="($event.target as HTMLImageElement).style.display = 'none'"
-            />
-            <span>{{ row.nickname.slice(0, 1) || '?' }}</span>
-          </div>
+          <AccountAvatar :src="row.avatar" :name="row.nickname" :size="28" />
           <div class="min-w-0 flex-1">
             <div class="text-[13.5px] font-medium truncate">{{ row.nickname }}</div>
             <div class="text-[11.5px] muted truncate">{{ sub(row) }}</div>
@@ -228,27 +202,6 @@ onUnmounted(() => document.removeEventListener('click', close))
 }
 .account-bad {
   opacity: 0.6;
-}
-.avatar {
-  position: relative;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  overflow: hidden;
-  flex: none;
-  display: grid;
-  place-items: center;
-  font-size:var(--text-meta);
-  font-weight: 600;
-  background: var(--surface-3);
-  color: var(--accent);
-}
-.avatar img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
 }
 .del {
   width: 20px;

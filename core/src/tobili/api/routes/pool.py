@@ -114,6 +114,7 @@ def run(body: PoolRun, box: Container = Depends(get_container)) -> dict[str, obj
         "joined": report.joined,
         "skipped": report.skipped,
         "failed": report.failed,
+        "review": report.review,
         "pending": report.pending,
         "paused": report.paused,
         "note": report.note,

@@ -79,7 +79,18 @@ class DynamicReader:
         item = (payload.get("data") or {}).get("item")
         if not isinstance(item, dict):
             raise RemoteError(Fault.PARSE, f"动态 {dyn_id} 没有详情数据")
-        return to_detail(item, dyn_id=dyn_id)
+        from dataclasses import replace
+        from .parser import subject_of,text_of
+        from .public_sources import opus_item,OPUS
+        from .official_draw import read_draw
+        item=subject_of(item)
+        if not text_of(item):
+            opus=codes.ensure_ok(self._transport.fetch(OPUS,query={'id':str(item.get('id_str') or dyn_id)},referer=endpoints.dyn_referer(dyn_id)),what='读取图文详情')
+            raw=(opus.get('data') or {}).get('item')
+            if isinstance(raw,dict):item=opus_item(raw)
+        facts=read_draw(self._transport,item)
+        detail=to_detail(item,dyn_id=dyn_id)
+        return replace(detail,draw=facts,deadline=facts.deadline if facts else detail.deadline)
 
     def raw_detail(self, dyn_id: str) -> dict:
         """探测需要原始结构（比如点赞状态），单独开一个口子。"""
@@ -116,7 +127,7 @@ class DynamicReader:
         3. 分页游标在 `data.cursor.next`，不是自己加页码。
         """
         messages: list[str] = []
-        cursor: int | None = 0
+        cursor: int | str | None = 0
         for page in range(max(1, pages)):
             if cursor is None:
                 break
@@ -151,18 +162,24 @@ class DynamicReader:
         *,
         rid: str,
         comment_type: int,
-        cursor: int,
+        cursor: int | str,
         page_size: int,
         referer: str,
         resign: bool,
+        strict: bool = False,
+        mode: int = 3,
     ) -> dict | None:
         query = {
             "oid": rid,
             "type": comment_type,
-            "mode": 3,
+            "mode": mode,
             "next": cursor,
             "ps": page_size,
         }
+        if isinstance(cursor, str):
+            import json
+            query.pop('next')
+            query['pagination_str'] = json.dumps({'offset': cursor}, separators=(',', ':'))
         for attempt in range(2 if resign else 1):
             try:
                 payload = self._transport.fetch(
@@ -171,11 +188,15 @@ class DynamicReader:
                     referer=referer or endpoints.FOLLOWING_REFERER,
                 )
             except Exception:
+                if strict:
+                    raise
                 return None
             if codes.code_of(payload) == codes.OK:
                 return payload
             # -403 是签名不对（可能是密钥轮换了），重签一次还有机会。
             if codes.code_of(payload) != codes.FORBIDDEN:
+                if strict:
+                    codes.ensure_ok(payload, what="核对本人评论")
                 return None
         return None
 
@@ -510,7 +531,7 @@ def _count(data: dict, key: str) -> int:
     return int(value) if isinstance(value, (int, float)) else 0
 
 
-def _next_cursor(cursor: object) -> int | None:
+def _next_cursor(cursor: object) -> int | str | None:
     """下一批评论的游标。`is_end` 或没有 `next` 就是到头了。
 
     注意 `next=0` 是合法的（第一批），只有 `None` 才算结束 —— 把 0 当成"没有了"
@@ -520,8 +541,13 @@ def _next_cursor(cursor: object) -> int | None:
         return None
     if cursor.get("is_end"):
         return None
+    pagination = cursor.get('pagination_reply')
+    if isinstance(pagination, dict):
+        offset = pagination.get('next_offset')
+        if isinstance(offset, str) and offset:
+            return offset
     raw = cursor.get("next")
-    if raw is None:
+    if raw is None or isinstance(raw, bool):
         return None
     try:
         return int(raw)

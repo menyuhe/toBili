@@ -36,7 +36,8 @@ def test_enroll_recheck_uses_stored_publication_not_today(repos, gateway, clock,
         journal=Journal(gateway=gateway, intents=repos.intents, clock=clock),
         clock=clock,
     )
-    assert enroll.run(account_id, "12345", dry_run=True).stage is Stage.SETTLED
+    result = enroll.run(account_id, "12345", dry_run=True)
+    assert result.skipped and result.stage is Stage.BLOCKED
     card = repos.campaigns.by_dyn("12345")[1]
     assert card.deadline.isoformat() == "2026-10-09T12:00:00+00:00"
     assert card.published_at == published

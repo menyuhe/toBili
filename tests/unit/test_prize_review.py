@@ -8,6 +8,24 @@ from tobili.usecases.prize_review import review_batch
 from tobili.usecases.scan_model import ScanModel
 
 
+def test_retail_contents_are_not_lottery_prizes():
+    from tobili.usecases.prize_review import valid_reward
+    body = "礼盒含键盘、鼠标，限量500份。11月23日抽5位玩家获得游戏礼包码及挂件。"
+    quote = "11月23日抽5位玩家获得游戏礼包码及挂件。"
+    assert valid_reward(dict(rewards=["游戏礼包码", "挂件"], evidence=quote), body) == "游戏礼包码；挂件"
+    assert not valid_reward(dict(rewards=["键盘", "鼠标"], evidence=quote), body)
+    assert not valid_reward(dict(rewards=["键盘"], evidence="抽送键盘"), body)
+
+
+def test_model_rejection_does_not_resurrect_heuristic_prize(repos):
+    from tobili.usecases.scan_model import facts_for
+    from tobili.ports.models import FeedItem
+    from datetime import datetime, UTC
+    model = ScanModel(SimpleNamespace(chat=lambda *a, **k: '{"reward":""}', describe=lambda: {}), repos.db)
+    item = FeedItem(dyn_id="41", up_uid="7", text="奖品键盘是宣传图，实际活动取消")
+    assert facts_for(item, datetime.now(UTC), model)[2] == ""
+
+
 def test_prizes_are_evidence_bound_and_survive_ordinary_scans(repos, clock):
     cid = repos.campaigns.upsert(
         Campaign(
@@ -22,7 +40,7 @@ def test_prizes_are_evidence_bound_and_survive_ordinary_scans(repos, clock):
     llm = SimpleNamespace(
         ready=lambda: True,
         chat=lambda *a, **k: json.dumps(
-            {"items": [{"id": cid, "rewards": ["机械键盘2把"]}]}, ensure_ascii=False
+            {"items": [{"id": cid, "rewards": ["机械键盘2把"], "evidence": "奖品：机械键盘2把"}]}, ensure_ascii=False
         ),
     )
     box = SimpleNamespace(db=repos.db, repos=repos, llm=lambda: llm, clock=clock, bus=EventBus())
@@ -58,7 +76,7 @@ def test_scan_model_has_no_three_call_cap(repos):
 
     def chat(messages, **kw):
         calls.append(1)
-        return json.dumps({"reward": messages[-1]["content"]}, ensure_ascii=False)
+        return json.dumps({"reward": messages[-1]["content"], "reward_evidence": messages[-1]["content"]}, ensure_ascii=False)
 
     model = ScanModel(SimpleNamespace(chat=chat, describe=lambda: {"model": "fixture"}), repos.db)
     for n in range(8):

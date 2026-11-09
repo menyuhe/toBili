@@ -4,6 +4,7 @@ import { extraNav } from './extensions'
 import { useRoute } from 'vue-router'
 
 import Modal from './components/Modal.vue'
+import TaskLog from './components/TaskLog.vue'
 import Icon from './components/Icon.vue'
 import Countdown from './components/Countdown.vue'
 const scheduledNext=ref<{label:string;at:number}>()
@@ -27,7 +28,14 @@ import { req } from './api'
 import { unlock } from './sound'
 
 const route = useRoute()
+const appVersion = __APP_VERSION__
 const tasksOpen=ref(false)
+const resultAttention=ref(0)
+const messageAttention=computed(()=>Math.max(state.unreadMessages||0,Math.max(0,(state.gate?.unread_chat||0)-(state.gate?.acked_chat||0))+Math.max(0,(state.gate?.unread_system||0)-(state.gate?.acked_system||0))))
+function badge(path:string){return path==='/campaigns'?(state.queueCount||0):path==='/results'?resultAttention.value+messageAttention.value:0}
+function badgeTitle(path:string){return path==='/campaigns'?`${state.queueCount||0} 条待参与`:`${messageAttention.value} 条待看消息 · ${resultAttention.value} 条待核对`}
+async function refreshAttention(){const owner=accountKey.value;try{const r=await req<{account_id:number;results:number}>('/api/history/attention');if(owner===accountKey.value&&r.account_id===owner)resultAttention.value=r.results}catch{}}
+
 const taskPanel=ref<InstanceType<typeof Auto>>()
 const closeTasks=()=>taskPanel.value?.mayLeave()??true
 const groups = computed(() => [
@@ -41,7 +49,7 @@ const groups = computed(() => [
 const section=computed(()=>groups.value.find(g=>g.items.some(x=>x.to===route.path)) || groups.value[0]!)
 const dragging = ref(false)
 const taskProgress=ref(''),nextTask=ref('')
-const accountEvents=computed(()=>state.events.filter(e=>!e.account_id||e.account_id===accountKey.value))
+const accountEvents=computed(()=>state.events.filter(e=>e.scope==='shared'||!e.account_id||e.account_id===accountKey.value))
 let taskPoll:ReturnType<typeof setInterval>|undefined
 async function refreshTask(){
  const owner=accountKey.value
@@ -56,13 +64,13 @@ onMounted(async () => {
   await refreshAll()
   stopEvents = startEvents()
   startInboxWatch()
-  void refreshTask();taskPoll=setInterval(()=>{void refreshTask();void refreshQueue()},5000)
+  void refreshTask();void refreshAttention();taskPoll=setInterval(()=>{void refreshTask();void refreshQueue()},5000)
   // 浏览器不许没交互过的页面出声。第一次点哪儿都算 —— 在这里挂一次就够，
   // 之后 play() 才能真的响。
   document.addEventListener('pointerdown', unlock, { once: true })
   document.addEventListener('keydown', unlock, { once: true })
   // 闸门依赖网络，别让顶栏长时间显示过期状态。
-  timer = window.setInterval(() => void refreshGuard(), 30000)
+  timer = window.setInterval(() => {void refreshGuard();void refreshAttention()}, 30000)
 })
 
 onUnmounted(() => {
@@ -107,17 +115,17 @@ const quotaText = computed(() => {
 const accountKey = computed(
   () => state.overview?.accounts.find((row) => row.current)?.id ?? state.overview?.account?.uid ?? 'anon',
 )
-watch(accountKey,()=>{taskProgress.value='';scheduledNext.value=undefined;void refreshTask();void refreshQueue()})
+watch(accountKey,()=>{resultAttention.value=0;void refreshAttention();taskProgress.value='';scheduledNext.value=undefined;void refreshTask();void refreshQueue()})
 </script>
 
 <template>
   <!-- 未登录：整屏换成扫码页。功能全要凭据，留着空壳子反而让人乱点。 -->
   <LoginPanel v-if="state.ready && !state.signedIn" />
 
-  <div v-else class="flex h-[100dvh] overflow-hidden" :class="dragging ? 'select-none' : ''">
+  <div v-else class="app-shell flex h-[100dvh] overflow-hidden" :class="dragging ? 'select-none' : ''">
         <aside
           class="app-sidebar w-[192px] flex-none flex flex-col border-r"
-          style="background: var(--surface); border-color: var(--line)"
+          style="border-color: var(--line)"
         >
           <div class="flex items-center gap-2.5 px-5 h-[58px]">
             <img src="/icon.png" alt="toBili" class="w-[30px] h-[30px] flex-none" />
@@ -131,7 +139,7 @@ watch(accountKey,()=>{taskProgress.value='';scheduledNext.value=undefined;void r
             <RouterLink v-for="group in groups" :key="group.label" :to="group.items[0]!.to"
               class="nav-item" :class="{'nav-active':section===group}" :style="{'--section-color':group.color}"
               :aria-current="section===group?'page':undefined">
-              <Icon :name="navIcon(group.items[0]!.to)"/><span>{{group.label}}</span>
+              <Icon :name="navIcon(group.items[0]!.to)"/><span>{{group.label}}</span><span v-if="badge(group.items[0]!.to)" class="nav-badge" :title="badgeTitle(group.items[0]!.to)" :aria-label="badgeTitle(group.items[0]!.to)">{{badge(group.items[0]!.to)>99?'99+':badge(group.items[0]!.to)}}</span>
             </RouterLink>
           </nav>
 
@@ -147,7 +155,7 @@ watch(accountKey,()=>{taskProgress.value='';scheduledNext.value=undefined;void r
               <span>{{ state.theme === 'dark' ? '浅色' : '深色' }}</span>
             </button>
             <div class="px-2 mt-2.5 text-[11.5px] muted flex items-center justify-between">
-              <span>v0.1.0</span>
+              <span :title="'当前程序版本 ' + appVersion">v{{appVersion}}</span>
               <span :title="state.connected ? '事件流已连接' : '事件流断开，正在重连'">
                 <span class="inline-block w-1.5 h-1.5 rounded-full mr-1" :style="{ background: state.connected ? 'var(--ok)' : 'var(--muted)' }" />
                 {{ state.connected ? '已连接' : '离线' }}
@@ -180,7 +188,7 @@ watch(accountKey,()=>{taskProgress.value='';scheduledNext.value=undefined;void r
           </header>
 
           <nav v-if="section.items.length>1" class="workspace-tabs" :style="{'--section-color':section.color}" aria-label="页内导航">
-            <RouterLink v-for="tab in section.items" :key="tab.to" :to="tab.to" :class="{'selected':route.path===tab.to,'risk-tab':tab.to==='/tidy'}" :aria-current="route.path===tab.to?'page':undefined"><Icon :name="navIcon(tab.to)" :size="16"/><span>{{tab.label}}</span><span v-if="tab.to==='/pool'" class="tab-count" aria-label="待参与条数">{{state.queueCount??'—'}}</span></RouterLink>
+            <RouterLink v-for="tab in section.items" :key="tab.to" :to="tab.to" :class="{'selected':route.path===tab.to,'risk-tab':tab.to==='/tidy'}" :aria-current="route.path===tab.to?'page':undefined"><Icon :name="navIcon(tab.to)" :size="16"/><span>{{tab.label}}</span><span v-if="tab.to==='/inbox'&&messageAttention" class="nav-badge">{{messageAttention}}</span><span v-if="tab.to==='/pool'" class="tab-count" aria-label="待参与条数">{{state.queueCount??'—'}}</span></RouterLink>
           </nav>
           <div class="app-content flex-1 overflow-y-auto px-5 py-4">
             <RouterView v-slot="{ Component }">
@@ -189,9 +197,7 @@ watch(accountKey,()=>{taskProgress.value='';scheduledNext.value=undefined;void r
           </div>
           <details class="event-ribbon">
             <summary><span class="log-label">任务日志</span> · {{ taskProgress || (accountEvents.length ? accountEvents[0]?.text : '等待新事件') }}<RouterLink class="log-problems" to="/activity?issues=1" @click.stop>异常记录</RouterLink><span class="next-task">下一项：{{nextTask}}</span></summary>
-            <div class="toolbar log-actions"><RouterLink to="/activity">全部记录</RouterLink><RouterLink to="/activity?issues=1">异常 / 待核对</RouterLink></div>
-            <div v-for="(event,i) in accountEvents.slice(0,12)" :key="i" :class="{'log-issue':event.issue}">{{ new Date(event.at*1000).toLocaleTimeString() }}　{{ event.text }}</div>
-            <RouterLink to="/activity">全部记录</RouterLink>
+            <TaskLog compact :key="accountKey"/><RouterLink class="log-full-link" to="/activity">打开完整日志 ↗</RouterLink>
           </details>
         </main>
       </div>

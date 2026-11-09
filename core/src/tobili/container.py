@@ -6,6 +6,7 @@ desktop）都从这里拿同一套装配好的对象，而不是各自 new 一�
 
 from __future__ import annotations
 
+import hashlib
 import threading
 from collections.abc import Callable
 from datetime import UTC, timedelta
@@ -57,9 +58,15 @@ class Container:
     def __init__(self, home: str | None = None) -> None:
         self.paths: Paths = resolve(home)
         self.vault = FileVault(self.paths.vault)
+        from .adapters.avatar import AvatarCache
+
+        self.avatars = AvatarCache(self.paths.home / "cache" / "avatars")
         self.db = Database(self.paths.database)
         self.db.migrate()
         self.repos = Repositories(self.db)
+        from .usecases.participation_repair import reclassify_checkins, repair_legacy_likes
+        reclassify_checkins(self)
+        repair_legacy_likes(self)
         self.clock = SystemClock()
         # 序号从库里接上，重启后 SSE 的 Last-Event-ID 才不会把新事件全丢掉。
         self.bus = EventBus(
@@ -185,6 +192,7 @@ class Container:
             feeds=self.repos.feeds,
             campaigns=self.repos.campaigns,
             clock=self.clock,
+            events=self.bus,
         )
 
     def manage_feeds(self) -> ManageFeeds:
@@ -233,6 +241,7 @@ class Container:
             quota=self.quota(account_id),
             composer=self.text(account_id),
             events=self.bus,
+            standard_actions=True,
         )
 
     def enroll(self) -> Enroll:
@@ -541,6 +550,12 @@ class Container:
                 {
                     "id": account_id,
                     **_profile_dict(profile),
+                    "avatar": (
+                        f"/api/accounts/{account_id}/avatar?v="
+                        + hashlib.sha256(profile.avatar.encode()).hexdigest()[:12]
+                        if profile.avatar
+                        else ""
+                    ),
                     "current": account_id == current_id,
                     "ready": bool(ref) and self.vault.exists(ref),
                 }
@@ -593,9 +608,9 @@ class Container:
         # 活动是公共的（同一个活动谁都能参与），但"我参与了几条"必须按账号数 ——
         # 否则切到一个空账号，概览上还写着别人的三十条。
         account_id = current[0] if current else 0
-        total = conn.execute("SELECT COUNT(*) AS n FROM campaign").fetchone()["n"]
+        total = conn.execute("SELECT COUNT(*) AS n FROM campaign c WHERE NOT EXISTS(SELECT 1 FROM catalog_removed x WHERE x.dyn_id=c.dyn_id)").fetchone()["n"]
         open_now = conn.execute(
-            "SELECT COUNT(*) AS n FROM campaign WHERE deadline_at IS NULL OR deadline_at > ?",
+            "SELECT COUNT(*) AS n FROM campaign c WHERE NOT EXISTS(SELECT 1 FROM catalog_removed x WHERE x.dyn_id=c.dyn_id) AND (deadline_at IS NULL OR deadline_at > ?)",
             (_utc_stamp(self.clock),),
         ).fetchone()["n"]
         enrolled = conn.execute(

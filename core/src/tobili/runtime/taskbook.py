@@ -7,6 +7,7 @@ import time
 from .lane import BusyAccount
 from .redact import safe_exception
 from .work_priority import participation_turn, requested
+from ..domain.errors import Fault, RemoteError
 
 TASKS = {
     "topics": ("话题更新", ("topic",), 60),
@@ -18,6 +19,20 @@ TASKS = {
     "cleanup": ("清理检查", (), 180),
 }
 KEY = "tasks.config"
+
+
+def source_slot(box, owner, key):
+    local = float(box.repos.settings.get(owner, "sources.next_slot", "0"))
+    if key in ("topics", "collections"):
+        return max(local, float(box.repos.settings.get(0, "sources.shared.next_slot", "0")))
+    return local
+
+
+def feed_due_at(box, owner, feed):
+    local = float(box.repos.settings.get(owner, f"tasks.feed_due.{feed['id']}", "0"))
+    if feed["kind"] in ("topic", "collection"):
+        return max(float(feed.get("next_scan_at", 0)), local)
+    return local
 
 
 class TaskBook:
@@ -64,8 +79,9 @@ class TaskBook:
             for task in config["tasks"]:
                 if task["enabled"] and task["key"] != self.active.get(owner, {}).get("key"):
                     at = float(settings.get(owner, f"tasks.due.{task['key']}", "0"))
+                    at = max(at, float(settings.get(owner, "tasks.cooldown", "0")))
                     if TASKS[task["key"]][1]:
-                        at = max(at, float(settings.get(owner, "sources.next_slot", "0")))
+                        at = max(at, source_slot(self.box, owner, task["key"]))
                     upcoming.append(dict(key=task["key"], label=TASKS[task["key"]][0], at=at))
         scheduled_next = min(upcoming, key=lambda item: item["at"]) if upcoming else None
         upcoming = [{**item, "at": max(now, item["at"])} for item in upcoming]
@@ -178,6 +194,8 @@ class TaskBook:
     def tick(self, owner):
         if not self.box.has_session(owner) or requested(self.box, owner):
             return
+        if float(self.box.repos.settings.get(owner, "tasks.cooldown", "0")) > time.time():
+            return
         with self.guard:
             config = self.config(owner)
             if not config["running"]:
@@ -188,11 +206,7 @@ class TaskBook:
 
             def due(t):
                 at = float(self.box.repos.settings.get(owner, f"tasks.due.{t['key']}", "0"))
-                return (
-                    max(at, float(self.box.repos.settings.get(owner, "sources.next_slot", "0")))
-                    if TASKS[t["key"]][1]
-                    else at
-                )
+                return max(at, source_slot(self.box, owner, t["key"])) if TASKS[t["key"]][1] else at
 
             ready = [t for t in active if due(t) <= time.time()]
             if not ready:
@@ -224,15 +238,20 @@ class TaskBook:
             "note": "",
         }
         started = False
+        admitted = 0
+        cooldown = float(box.repos.settings.get(owner, "tasks.cooldown", "0"))
+        if cooldown > time.time():
+            return {**result, "note": "平台请求冷却中，到时自动继续", "next_seconds": cooldown-time.time()}
 
         def checkpoint(index):
+            nonlocal admitted
             if self.stop.is_set() or (scheduled and not self.compatible(owner, key, config)):
                 return "任务已停止或配置改变，本轮结束"
             self.active[owner] = {
                 "key": key,
                 "since": result["at"],
-                "completed": index,
-                "note": f"正在处理第 {index + 1} 条",
+                "completed": admitted,
+                "note": f"正在处理第 {admitted + 1} 条",
             }
             if apply:
                 attempts = self.attempts(owner)
@@ -242,6 +261,7 @@ class TaskBook:
                 box.repos.settings.put(
                     owner, "tasks.attempts", json.dumps([*attempts, time.time()])
                 )
+            admitted += 1
             return ""
 
         try:
@@ -273,9 +293,7 @@ class TaskBook:
                     if scheduled:
                         feeds = sorted(
                             feeds,
-                            key=lambda feed: float(
-                                box.repos.settings.get(owner, f"tasks.feed_due.{feed['id']}", "0")
-                            ),
+                            key=lambda feed: feed_due_at(box, owner, feed),
                         )
                     for feed in feeds:
                         if scheduled and requested(box, owner):
@@ -287,7 +305,7 @@ class TaskBook:
                             raise RuntimeError("任务已中止，进度已保存")
                         if feed["enabled"] and feed["kind"] in kinds:
                             due_key = f"tasks.feed_due.{feed['id']}"
-                            due = float(box.repos.settings.get(owner, due_key, "0"))
+                            due = feed_due_at(box, owner, feed)
                             if scheduled and due > time.time():
                                 feed_due.append(due)
                                 continue
@@ -306,12 +324,34 @@ class TaskBook:
                                 "note": f"正在更新 {feed['label'] or feed['target']}",
                             }
                             report = box.scan_feeds(owner).run(
-                                owner, feed_id=feed["id"], pages=1, per_feed=5 if scheduled else 20
+                                owner,
+                                feed_id=feed["id"],
+                                pages=1,
+                                per_feed=5 if scheduled else 20,
+                                **(
+                                    {"automatic": True}
+                                    if scheduled and feed["kind"] in ("topic", "collection")
+                                    else {}
+                                ),
                             )
                             reports.append(report)
                             if scheduled:
                                 delay = max(600, interval) if report.problems else interval
                                 due = time.time() + delay
+                                if feed["kind"] in ("topic", "collection"):
+                                    fresh = next(
+                                        (
+                                            f
+                                            for f in box.repos.feeds.list_for(owner)
+                                            if f["id"] == feed["id"]
+                                        ),
+                                        feed,
+                                    )
+                                    due = max(
+                                        time.time() + 60,
+                                        float(fresh.get("next_scan_at", 0)) or due,
+                                        source_slot(box, owner, key),
+                                    )
                                 box.repos.settings.put(owner, due_key, str(due))
                                 feed_due.append(due)
                     problems = [p for r in reports for p in r.problems]
@@ -319,14 +359,35 @@ class TaskBook:
                         scanned=sum(r.scanned for r in reports),
                         ok=not problems,
                         note="；".join(problems)
-                        or f"更新 {len(reports)} 个来源，识别 {sum(r.matched for r in reports)} 条活动",
+                        or (
+                            "共享订阅已更新，本轮复用"
+                            if reports and all(getattr(r, "reused", 0) for r in reports)
+                            else f"更新 {len(reports)} 个来源，识别 {sum(r.matched for r in reports)} 条活动"
+                        ),
                     )
                     if scheduled and feed_due:
                         result["next_seconds"] = max(60, min(feed_due) - time.time())
                 elif key == "participate":
                     if apply and box.check_writer:
                         box.check_writer(owner)
-                    if config["selection"] == "queue":
+                    if apply and scheduled:
+                        from ..usecases.participation_repair import reconcile_follows
+                        repairs = reconcile_follows(box, owner, cancelled=lambda: self.stop.is_set() or not self.compatible(owner,key,config))
+                        result.update(follow_checked=repairs['checked'],follow_repaired=repairs['repaired'])
+                    # Explicitly selected items take priority even in catalogue mode.
+                    if apply and config['selection'] == 'catalog':
+                        from ..usecases.participation_repair import recheck_catalog
+                        resumed = recheck_catalog(box,owner,cancelled=lambda: self.stop.is_set() or
+                            (scheduled and not self.compatible(owner,key,config)))
+                        result['catalog_checked'] = resumed['checked']
+                        result['catalog_ready'] = resumed['ready']
+                    # Run through RunPool so progress, pause and completion stay in sync.
+                    from ..usecases.pool import history_pending
+                    queued = any(item.waiting or (item.state.value == 'review' and history_pending(item.message))
+                                 for item in box.repos.pool.states(owner))
+                    paused = box.repos.pool.paused(owner)[0]
+                    queue_report = None
+                    if config["selection"] == "queue" or queued or paused:
                         r = box.run_pool(owner).run(
                             owner,
                             apply=apply,
@@ -343,10 +404,21 @@ class TaskBook:
                             written=r.joined if apply else 0,
                             note=r.note,
                         )
-                    else:
+                        queue_report = r
+                    remaining = max(0, config["limit"] - admitted)
+                    # Catalogue mode fills unused slots after the explicit queue.
+                    # Read-only legacy checks do not occupy participation slots;
+                    # errors, pause and cancellation still stop the whole round.
+                    can_fill = queue_report is None or (
+                        not queue_report.failed
+                        and not getattr(queue_report, 'stop_reason', '')
+                        and not box.repos.pool.paused(owner)[0]
+                        and not any(item.waiting for item in box.repos.pool.states(owner))
+                    )
+                    if config["selection"] == "catalog" and can_fill and remaining:
                         r = box.batch_enroll(owner).run(
                             owner,
-                            limit=config["limit"],
+                            limit=remaining,
                             floor=0.8,
                             dry_run=not apply,
                             before_each=checkpoint,
@@ -356,14 +428,26 @@ class TaskBook:
                                 or (scheduled and not self.compatible(owner, key, config))
                             ),
                         )
-                        result.update(
-                            ok=r.ok,
-                            scanned=r.candidates,
-                            written=r.settled if apply else 0,
-                            note=r.stop_reason
-                            or "；".join(r.problems)
-                            or f"候选 {r.candidates} 条，完成 {r.settled} 条",
+                        note = r.stop_reason
+                        note = note or "；".join(r.problems) or (
+                            f"奖品库候选 {r.candidates} 条，完成 {r.settled} 条"
+                            if r.candidates else box.repos.campaigns.no_candidate_reason(owner, now=box.clock.now(), floor=0.8)
                         )
+                        if r.blocked:
+                            reasons = list(dict.fromkeys(line.note for line in r.lines if line.stage.value == 'blocked' and line.note))
+                            note += f"；待处理 {r.blocked} 条"
+                            if reasons:
+                                note += '：' + '；'.join(reasons[:3])[:360]
+                        result.update(
+                            ok=result['ok'] and r.ok,
+                            scanned=result['scanned'] + r.candidates,
+                            written=result['written'] + (r.settled if apply else 0),
+                            note='；'.join(x for x in (result['note'], note) if x),
+                        )
+                    if result.get('follow_checked'):
+                        result['note'] += f"；关注补查 {result['follow_checked']} 条，补关注 {result.get('follow_repaired', 0)} 条"
+                    if result.get('catalog_checked'):
+                        result['note'] += f"；奖品库复核 {result['catalog_checked']} 条，可接续 {result['catalog_ready']} 条"
                 elif key == "results":
                     r = box.settle(owner).run(
                         owner, profile=box.repos.accounts.by_id(owner), limit=20, dry_run=False
@@ -387,6 +471,13 @@ class TaskBook:
         except BusyAccount:
             result.update(ok=False, note="账号正在执行其他任务，稍后再试")
             box.repos.settings.put(owner, f"tasks.due.{key}", str(time.time() + 60))
+        except RemoteError as exc:
+            if exc.fault in (Fault.RISK, Fault.RATE_LIMIT, Fault.NETWORK, Fault.TIMEOUT):
+                box.repos.settings.put(owner, "tasks.cooldown", str(time.time() + 900))
+                result.update(ok=False, cooldown=True, next_seconds=900,
+                              note=f"{safe_exception(exc)}；冷却 15 分钟后按原排期继续")
+            else:
+                result.update(ok=False, note=safe_exception(exc))
         except Exception as exc:
             result.update(ok=False, note=safe_exception(exc))
         finally:
@@ -395,7 +486,7 @@ class TaskBook:
                 if key == "participate":
                     getattr(box, "pool_progress", {}).pop(owner, None)
         with self.guard:
-            if started and scheduled and apply and key == "participate" and not result["ok"]:
+            if started and scheduled and apply and key == "participate" and not result["ok"] and not result.get("cooldown"):
                 current = self.config(owner)
                 if self.compatible(owner, key, config):
                     for task in current["tasks"]:

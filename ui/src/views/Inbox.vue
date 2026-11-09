@@ -51,6 +51,7 @@ async function load() {
     if(!alive||owner!==state.overview?.accounts.find(a=>a.current)?.id)return
     view.value = result
     state.prizes = view.value.counts.prize
+    state.unreadMessages = view.value.counts.unread
     // 这一页已经摆在人眼前了，后台就别再为同一批消息响一次。
     markPrizesKnown(view.value.items.filter((row) => row.prize).map((row) => row.key))
   } catch (error) {

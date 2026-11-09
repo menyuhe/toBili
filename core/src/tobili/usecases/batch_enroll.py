@@ -142,6 +142,9 @@ class BatchEnroll:
                 stop_reason = str(exc)
                 break
             except Exception as exc:  # 单条炸掉不该中断整轮
+                from ..domain.errors import Fault, RemoteError
+                if isinstance(exc, RemoteError) and exc.fault in (Fault.AUTH, Fault.RISK, Fault.RATE_LIMIT, Fault.NETWORK, Fault.TIMEOUT):
+                    raise
                 problems.append(f"{up_name or dyn_id}：{safe_exception(exc)}")
                 counts[Stage.FAILED] += 1
                 lines.append(BatchLine(dyn_id, up_name, Stage.FAILED, safe_exception(exc)))
@@ -150,7 +153,8 @@ class BatchEnroll:
                     break
                 continue
 
-            counts[report.stage] = counts.get(report.stage, 0) + 1
+            if not getattr(report, "skipped", False):
+                counts[report.stage] = counts.get(report.stage, 0) + 1
             lines.append(BatchLine(dyn_id, up_name, report.stage, _note_of(report)))
             if stop_on_failure and report.stage is Stage.FAILED:
                 stop_reason = f"{up_name or dyn_id} 参与失败，本轮停止"
@@ -170,6 +174,8 @@ class BatchEnroll:
 
 
 def _note_of(report: EnrollReport) -> str:
+    if getattr(report, 'reason', ''):
+        return report.reason
     if report.stage is Stage.SETTLED and not report.steps:
         return "活动已截止，未做任何动作"
     parts = [f"{name}:{step.outcome.value}" for name, step in report.steps]

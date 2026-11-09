@@ -3,7 +3,7 @@
 import json
 from datetime import UTC, datetime, timedelta, timezone
 
-from ..publicwire import PublicPrize
+from ..publicwire import PublicPrize, UNVERIFIED_REWARD
 
 URL = "https://tobili.4wdo.cn/public/v1/catalog"
 CURSOR = "public_catalog.revision"
@@ -27,14 +27,16 @@ def apply_page(box, page, cursor):
         con.execute(
             "CREATE TABLE IF NOT EXISTS public_import_state(dyn TEXT PRIMARY KEY,payload TEXT NOT NULL)"
         )
-        manual = set()
+        manual = {r[0] for r in con.execute('SELECT c.dyn_id FROM deadline_override d JOIN campaign c ON c.id=d.campaign_id')}
         if con.execute("SELECT 1 FROM sqlite_master WHERE name='pro_edits'").fetchone():
-            manual = {
+            manual |= {
                 r[0]
                 for r in con.execute("SELECT dyn,accepted FROM pro_edits")
                 if "deadline_at" in json.loads(r[1])
             }
         for card in cards:
+            if con.execute('SELECT 1 FROM catalog_removed WHERE dyn_id=?',(card.dyn_id,)).fetchone():
+                continue
             if con.execute(
                 "SELECT 1 FROM up_block WHERE uid=? AND active=1", (card.up_uid,)
             ).fetchone():
@@ -107,12 +109,16 @@ def apply_page(box, page, cursor):
                         (*changes.values(), row["id"]),
                     )
                     updated += 1
+            if card.reward == UNVERIFIED_REWARD and not row["reward_locked"] and row["reward_status"] != "manual":
+                con.execute("UPDATE campaign SET reward='',reward_status='unknown' WHERE id=?", (row["id"],))
+            row = con.execute("SELECT * FROM campaign WHERE id=?", (row["id"],)).fetchone()
             if card.deadline_date and not row["deadline_at"] and card.dyn_id not in manual:
                 # Date-only information stays separate; it must not become a made-up minute.
                 con.execute(
-                    "INSERT OR IGNORE INTO deadline_check(campaign_id,body_text,published_at,before_at,candidate_at,precision,evidence,state,checked_at) VALUES(?,'',?,NULL,?,'day','公开活动目录','date_only',?)",
+                    "INSERT OR IGNORE INTO deadline_check(campaign_id,body_text,published_at,before_at,candidate_at,precision,evidence,state,checked_at) VALUES(?,?,?,NULL,?,'day','公开活动目录','date_only',?)",
                     (
                         row["id"],
+                        row["body_text"],
                         row["published_at"],
                         str(card.deadline_date) + "T00:00:00+08:00",
                         at,

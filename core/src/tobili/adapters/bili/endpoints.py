@@ -28,6 +28,8 @@ NAV = f"{API}/x/web-interface/nav"
 SPACE_FEED = f"{API}/x/polymer/web-dynamic/v1/feed/space"
 FOLLOWING_FEED = f"{API}/x/polymer/web-dynamic/v1/feed/all"
 DYN_DETAIL = f"{API}/x/polymer/web-dynamic/v1/detail"
+OPUS_DETAIL = f"{API}/x/polymer/web-dynamic/v1/opus/detail"
+OPUS_ACTION = f"{API}/x/community/cosmo/interface/simple_action"
 
 # 找源（按关键词搜 UP 主，不是搜动态）
 SEARCH_TYPE = f"{API}/x/web-interface/search/type"
@@ -45,7 +47,7 @@ LIST_REPLY = f"{API}/x/v2/reply/main"
 # 看起来像"这条没人评论"，其实是接口换了。
 LIST_REPLY_WBI = f"{API}/x/v2/reply/wbi/main"
 FAV_DEAL = f"{API}/x/v3/fav/resource/deal"
-RESERVE_CLICK = f"{API}/x/activity/reserve/click"
+RESERVE_CLICK = f"{API}/x/dynamic/feed/reserve/click"
 # 删除自己发的一条动态。只对本人动态有效：拿别人的 ID 调，远端返回 4126010。
 REMOVE_DYN = f"{VC}/dynamic_svr/v1/dynamic_svr/rm_dynamic"
 
