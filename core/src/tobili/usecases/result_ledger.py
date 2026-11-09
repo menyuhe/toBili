@@ -96,6 +96,7 @@ def discover(box, owner, *, resume=False, pages=3):
                 """SELECT c.id,c.dyn_id,c.up_uid,r.* FROM enrollment e
                 JOIN campaign c ON c.id=e.campaign_id
                 LEFT JOIN participation_ref r ON r.account_id=e.account_id AND r.campaign_id=c.id
+                LEFT JOIN result_probe p ON p.account_id=e.account_id AND p.campaign_id=c.id
                 WHERE e.account_id=? AND (e.stage='settled' OR r.campaign_id IS NOT NULL OR p.error='缺少 UP 信息')""",
                 (owner,),
             ).fetchall()
