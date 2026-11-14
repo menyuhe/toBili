@@ -26,6 +26,17 @@ class SwitchIn(BaseModel):
     account_id: int
 
 
+class HealthIn(BaseModel):
+    force: bool = False
+
+
+@router.post("/{account_id}/check")
+def check_login(account_id: int, body: HealthIn, box: Container = Depends(get_container)):
+    if account_id not in box.repos.accounts.ids():
+        raise HTTPException(404, "账号不存在")
+    return box.account_health.request(account_id, force=body.force)
+
+
 @router.get("/{account_id}/avatar")
 def avatar(account_id: int, box: Container = Depends(get_container)):
     if account_id not in box.repos.accounts.ids():

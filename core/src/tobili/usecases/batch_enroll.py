@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from time import sleep
 
 from ..domain.enrollment import Stage
-from ..domain.errors import WriteUnavailable
+from ..domain.errors import TemporaryWriteUnavailable, WriteUnavailable
 from ..ports.collab import Clock
 from ..ports.repo import CampaignRepo
 from ..runtime.quota import Quota
@@ -137,6 +137,8 @@ class BatchEnroll:
                 report = self._enroll.run(
                     account_id, dyn_id, dry_run=dry_run, include_like=include_like
                 )
+            except TemporaryWriteUnavailable:
+                raise
             except WriteUnavailable as exc:
                 problems.append(str(exc))
                 stop_reason = str(exc)

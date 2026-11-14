@@ -17,9 +17,16 @@ from datetime import datetime
 from time import sleep
 
 from ..domain.enrollment import Stage
-from ..domain.errors import Fault, MissingCredential, RemoteError, WriteUnavailable
+from ..domain.errors import (
+    Fault,
+    MissingCredential,
+    RemoteError,
+    TemporaryWriteUnavailable,
+    WriteUnavailable,
+)
 from ..domain.pool import (
     POOL_LIMIT,
+    EmptyPool,
     PoolItem,
     PoolOp,
     PoolRejected,
@@ -248,7 +255,7 @@ class RunPool:
         )
         targets = [*recoverable, *waiting(states)]
         if not targets:
-            raise PoolRejected("预选池里没有待参与的活动")
+            raise EmptyPool("预选池里没有待参与的活动")
 
         enroll = self._enroll()
 
@@ -392,6 +399,8 @@ class RunPool:
                         account_id, f"正在参与 {len(lines) + 1}/{len(targets)} · {title}"
                     )
                 report = enroll.run(account_id, dyn_id, dry_run=not apply)
+            except TemporaryWriteUnavailable:
+                raise
             except WriteUnavailable as exc:
                 raise PoolRejected(str(exc)) from exc
             except Exception as exc:

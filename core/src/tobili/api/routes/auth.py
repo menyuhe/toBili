@@ -42,6 +42,8 @@ def poll(key: str, box: Container = Depends(get_container)) -> dict[str, object]
     except RemoteError as exc:
         raise HTTPException(status_code=502, detail=safe_exception(exc)) from exc
 
+    box.account_health.signed_in(result.account_id)
+
     return {
         "state": "confirmed",
         "account": {

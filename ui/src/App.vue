@@ -19,6 +19,7 @@ import {
   refreshAll,
   refreshGuard,
   refreshQueue,
+  checkAccountSessions,
   startEvents,
   startInboxWatch,
   state,
@@ -69,6 +70,7 @@ let stopEvents: (() => void) | null = null
 onMounted(async () => {
   applyTheme(state.theme)
   await refreshAll()
+  void checkAccountSessions()
   stopEvents = startEvents()
   startInboxWatch()
   void refreshTask();void refreshAttention();taskPoll=setInterval(()=>{void refreshTask();void refreshQueue()},5000)
@@ -77,7 +79,7 @@ onMounted(async () => {
   document.addEventListener('pointerdown', unlock, { once: true })
   document.addEventListener('keydown', unlock, { once: true })
   // 闸门依赖网络，别让顶栏长时间显示过期状态。
-  timer = window.setInterval(() => {void refreshGuard();void refreshAttention()}, 30000)
+  timer = window.setInterval(() => {void refreshGuard();void refreshAttention();void checkAccountSessions()}, 30000)
 })
 
 onUnmounted(() => {

@@ -84,6 +84,9 @@ class Container:
         self._gateways: dict[int, tuple[str, BiliGateway]] = {}
         self._tickets: dict[str, QrTicket] = {}
         self._clocks: dict[int, Schedule] = {}
+        from .runtime.account_health import AccountHealth
+
+        self.account_health = AccountHealth(self)
         from .runtime.taskbook import TaskBook
 
         self.tasks = TaskBook(self)
@@ -562,6 +565,7 @@ class Container:
                     ),
                     "current": account_id == current_id,
                     "ready": bool(ref) and self.vault.exists(ref),
+                    "session": self.account_health.view(account_id),
                 }
             )
         return items
@@ -642,6 +646,7 @@ class Container:
         }
 
     def close(self) -> None:
+        self.account_health.close()
         self.tasks.close()
         # 先停秒针再关连接：反过来的话，正在跑的那一轮会在网关关闭后炸出
         # 一个 "connection closed" 的错误，看起来像定时器坏了。

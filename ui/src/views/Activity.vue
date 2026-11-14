@@ -78,7 +78,7 @@ function clock(at: number) {
               活动间隔 {{ quota.budget.min_gap_seconds }} 秒
             </div>
           </template>
-          <div v-else class="text-[12.5px] muted">读取中…</div>
+          <div v-else class="text-[12.5px] muted">{{state.guardError||'正在读取参与状态…'}}<button v-if="state.guardError" @click="refreshAll">重试</button></div>
         </div>
       </section>
 

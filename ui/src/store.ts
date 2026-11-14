@@ -114,6 +114,12 @@ export async function refreshOverview() {
   }
 }
 
+export async function checkAccountSessions() {
+  const rows=state.overview?.accounts||[]
+  await Promise.allSettled(rows.map(row=>req(`/api/accounts/${row.id}/check`,{method:'POST',body:JSON.stringify({force:false})})))
+  await refreshOverview()
+}
+
 /** 闸门与配额都依赖网络，失败不抛 —— 顶栏少一个角标比整页报错好。
  *  但失败原因要留下来：顶栏写着"未知"却不说为什么，等于没写。
  */

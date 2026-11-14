@@ -1,110 +1,117 @@
 <div align="center">
-  <img src="ui/public/icon.png" width="76" alt="toBili logo" />
+  <img src="ui/public/icon.png" width="76" alt="toBili 图标" />
   <h1>toBili</h1>
-  <p><strong>发现奖品，安排参与，核验后收尾。</strong></p>
-  <p>本机多账号抽奖管理工具 · Windows / macOS · AGPL-3.0</p>
+  <p><strong>把散落在动态里的抽奖，整理成看得清、跟得上的奖品清单。</strong></p>
+  <p>B 站抽奖活动管理工具 · 本机多账号 · Windows / macOS</p>
   <p>
     <a href="https://github.com/menyuhe/toBili/releases/latest">下载桌面版</a> ·
-    <a href="docs/public/MAC.md">Mac 安装与构建</a> ·
     <a href="docs/public/GUIDE.md">使用指南</a> ·
-    <a href="https://tobili.4wdo.cn/public/">公开奖品目录</a> ·
+    <a href="docs/public/MAC.md">Mac 安装</a> ·
+    <a href="docs/public/CHANGELOG.md">更新记录</a> ·
     <a href="https://github.com/menyuhe/toBili/issues">反馈问题</a>
   </p>
-  <img alt="License AGPL-3.0-or-later" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-2063AE?style=flat-square" />
+  <img alt="AGPL-3.0-or-later" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-2063AE?style=flat-square" />
   <img alt="Python 3.12+" src="https://img.shields.io/badge/Python-3.12%2B-176B68?style=flat-square" />
-  <img alt="Windows and macOS desktop" src="https://img.shields.io/badge/desktop-Windows%20%7C%20macOS-2063AE?style=flat-square" />
+  <img alt="Windows / macOS" src="https://img.shields.io/badge/desktop-Windows%20%7C%20macOS-2063AE?style=flat-square" />
 </div>
 
 <br>
 
-![toBili 0.2.27 工作台](docs/public/media/overview.png)
+![toBili 0.2.29 运营中心](docs/public/media/overview.png)
 
-**奖品放在前面，账号状态分开管理。** 从话题、UP 合集、动态与公开目录发现奖品，筛选后加入待参与；每个账号独立安排任务、查看消息和核验结果。
+刷到活动、记下截止时间、切换账号、回头找开奖公告——事情不复杂，分散在不同页面里却很容易漏。toBili 把这些步骤放到同一个本机工作台：**先挑奖品，再安排参与，最后核验和收尾。**
 
-## 0.2.27 · 从发现到收尾
+话题和 UP 合集由本机账号共用；参与历史、消息标记与任务计划各自保存。你可以只用它整理活动，也可以为自己的账号开启定时任务。
 
-**同一份订阅，各自的参与计划。** 话题与 UP 合集供本机所有账号共用，更新结果不必重复抓取；参与记录、消息状态和定时设置按账号独立保存。
-
-- **先看奖品**：简明奖品名称、截止倒计时色标、组合筛选，直接在列表加入待参与。
-- **认准抽奖方式**：优先读取 B 站官方互动／预约组件，区分奖品、开奖时间与参与条件；模型补充识别正文和图片。
-- **看清后台进度**：挂机运作展示每个账号的当前事项、下一事项和倒计时；日志记录具体更新了哪个话题、哪个合集。
-- **日常少绕路**：常用操作卡片、侧栏待办数量、记住浅深主题；账号菜单在页面上层展开。
+## 下载与开始
 
 | Windows | Mac · Apple 芯片 | Mac · Intel |
 |:---:|:---:|:---:|
 | [下载 EXE](https://github.com/menyuhe/toBili/releases/latest/download/toBili.exe) | [下载 arm64 ZIP](https://github.com/menyuhe/toBili/releases/latest/download/toBili-macOS-arm64.zip) | [下载 x86_64 ZIP](https://github.com/menyuhe/toBili/releases/latest/download/toBili-macOS-x86_64.zip) |
 
-[源码包与校验值](https://github.com/menyuhe/toBili/releases/latest) · [完整使用指南](docs/public/GUIDE.md)
+[全部安装包、源码与 SHA256 校验值](https://github.com/menyuhe/toBili/releases/latest)
 
-## 一轮日常操作
+1. **启动并登录。** Windows 将 EXE 放进独立文件夹；Mac 解压后放进「应用程序」。扫码添加自己的账号，新账号默认不开启自动任务。
+2. **找到感兴趣的奖品。** 在「活动中心 → 订阅源」添加话题、UP 合集，或读取[公开奖品目录](https://tobili.4wdo.cn/public/)。筛选活动、校对资料，再加入待参与。
+3. **按自己的节奏安排。** 顶栏「定时任务」设置当前账号的功能、周期与范围；到「挂机运作」查看各账号的进度和下一次执行时间。
 
-![发现、入队、安排任务与多账号查看](docs/public/media/workflow.gif)
+Windows 需要 WebView2 Runtime。任务只在程序运行、电脑联网时执行；持续挂机可使用 `toBili.exe --tray`。详细安装、升级和数据位置见[使用指南](docs/public/GUIDE.md)。
 
-*演示使用虚构账号与奖品，没有登录凭据，也没有向 B 站发出参与操作。GIF 由 0.2.27 实际界面的操作截图组成，展示挑选、入队、定时设置与账号总览；并非真实参与成功的录像。*
+## 从一份清单，到一轮完整流程
 
-| 你要做的事 | 在哪里完成 |
+![挑选奖品、加入队列、设置排期与查看账号状态](docs/public/media/workflow.gif)
+
+*截图与 GIF 来自 0.2.29 的真实界面，使用虚构账号和奖品；演示没有登录真实账号，也没有向 B 站发出参与操作。*
+
+| 想解决的问题 | toBili 怎么做 |
 |:---:|:---:|
-| 找值得参加的奖品 | **活动中心**：组合筛选、截止时间、入队、不参加和 UP 黑名单 |
-| 安排几个账号 | **挂机运作**：相同规格的账号卡片，查看当前事项、下一事项与倒计时 |
-| 按自己的节奏参与 | **定时任务**：按账号选择功能、周期、范围与参与节奏 |
-| 确认是否中奖 | **获奖校验**：开奖核验、消息复核、人工改判；消息可标记与抽奖无关 |
-| 整理历史转发 | **清理**：核对清单与执行记录，截止时间不等于未中奖 |
+| 奖品信息埋在长篇动态里 | 简明奖品名、数量与截止时间放在列表中，点击标题查看原动态 |
+| 互动抽奖和预约抽奖容易混淆 | 优先读取官方组件中的奖品、时间、状态和条件，模型按需补充正文与图片 |
+| 账号多，不清楚哪个正在跑 | 每个账号单独显示当前事项、下一事项、倒计时和登录状态 |
+| 不知道订阅到底更新了什么 | 话题、合集、识别、参与和核验日志分别记录具体进度 |
+| 有活动失败，怕挡住后面的 | 单条业务问题保留原因；能继续的任务接着处理，未知发送结果先核查 |
+| 到了开奖时间，还要回头翻动态 | 开奖核验结合官方组件、公告与消息；可人工校对结论 |
+| 历史转发越来越多 | 先查看清理清单与核验依据，再执行删除；到期不会直接当成未中奖 |
+
+## 0.2.29：账号状态更清楚，任务接续看得见
+
+**“暂时读不到”与“需要重新登录”，现在分开显示。** 账号菜单和挂机运作页提供登录检查；网络超时、平台限流或钥匙串未授权时，显示暂无法确认，只有明确登录失效才提示重新扫码。
+
+![账号状态、检查登录与多账号查看](docs/public/media/account-status.gif)
+
+- **状态按账号独立检查。** 一个账号的读取不拖住另一个；重新扫码后，旧检查不会覆盖新登录结果。
+- **页面不再一直等。** 读取接口超时会显示重试提示，后台任务不会因此被页面停止，也不会自动重复提交写入请求。
+- **接续原来的计划。** 修正恢复场景的重试时间计算，保留原周期；明确登录失效时保留任务设置，重新登录后继续调度。
+- **旧错误有时间，新结果有位置。** 最新成功结果替换当前错误，历史记录仍保留，方便追溯。
+
+[查看完整更新记录](docs/public/CHANGELOG.md)
 
 <details>
-<summary><strong>展开查看：奖品列表、共享订阅、账号排期与深色主题</strong></summary>
+<summary><strong>展开界面图集：奖品、订阅、排期、账号与深色主题</strong></summary>
 
-**发现奖品** · 在截止时间与参与方式之间做选择
+### 奖品列表：先看想要什么，再决定参加哪个
 
-![发现奖品](docs/public/media/discover.png)
+![发现奖品与截止时间](docs/public/media/discover.png)
 
-**话题与合集** · 本机账号共用，入口按类型区分
+### 订阅源：话题与合集分开管理，本机账号共用
 
-![共享订阅源](docs/public/media/sources.png)
+![话题与 UP 合集订阅](docs/public/media/sources.png)
 
-**挂机运作** · 每个账号的状态单独展示
+### 定时任务：按账号设置周期、数量与参与范围
 
-![挂机运作](docs/public/media/accounts.png)
+![定时任务设置](docs/public/media/schedule.png)
 
-**定时任务** · 每个账号单独设置功能、周期与参与范围
+### 挂机运作：当前状态、登录检查和下一事项
 
-![定时任务](docs/public/media/schedule.png)
+![多账号状态与排期](docs/public/media/accounts.png)
 
-**深色主题** · 记住上次选择
+### 运行记录：追到具体来源和具体步骤
 
-![深色工作台](docs/public/media/dark.png)
+![分类运行日志](docs/public/media/activity.png)
+
+### 深色主题：沿用同样的布局，记住你的选择
+
+![深色运营中心](docs/public/media/dark.png)
 
 </details>
 
-## 0.2.27 更新
+## 用之前，几个常见问题
 
-- 列表共用标题、统计卡片、表格与分页；搜索和筛选收进标题栏。
-- 挂机运作按账号显示任务、完整 UID 和已读取的未读数；未读取时显示「—」。
-- 运行日志按参与、话题、合集和核验分栏，异常可展开详情或忽略。
-- 优先读取官方抽奖组件与公告；没有公告的单条记录不再中断整轮核验。
-- 核验重试按次数退避，已知开奖时间的条目到点再查；消息短期缓存减少重复请求。
+**必须配置大模型吗？** 不是。官方互动与预约组件优先提供结构化信息；你也可以人工修改奖品和时间。需要识别正文、图片或生成参与文案时，再配置自己的兼容模型接口。模型识别不是对奖品或开奖时间的保证。
 
-详细说明见 [更新记录](docs/public/CHANGELOG.md)。
+**已经参与过的，会不会再发一次？** 程序会查参与账本与平台状态；已成功或结果未知的转发、评论不会盲目重发。历史核查没完成的条目会显示待处理，不应把“整轮运行结束”理解成“每条活动全部完成”。
 
-## 三步开始
+**为什么开着任务，却没有新增参与？** 可能没有符合条件的活动、达到每小时上限、正在冷却，或账号需要重新登录。先看「挂机运作」和最新参与日志，不必反复点击参与一次。具体状态与处理方式见[登录与任务排查](docs/public/GUIDE.md#登录与任务排查)。
 
-1. 从 [Releases](https://github.com/menyuhe/toBili/releases/latest) 下载桌面版：Windows 用 `toBili.exe`；Mac 按芯片选择 ZIP，解压后放进「应用程序」（[安装说明](docs/public/MAC.md)）。
-2. 双击启动并扫码。右上角可添加自己的其他账号；新账号默认不开启自动任务。
-3. 在 **活动中心 → 订阅源** 添加来源，或读取公开目录；挑选奖品加入待参与，再按需配置定时任务。
+**更新后需要重新建账号吗？** 同一系列版本升级保留原数据：Windows 退出后替换原文件夹里的 EXE，保留 `data/`；Mac 覆盖原应用，保留 Application Support 中的数据。跨电脑复制凭据可能需要重新扫码。从历史旧实现迁移请先看[迁移说明](docs/public/MIGRATION.md)。
 
-Windows 需要 WebView2 Runtime。数据库保存在程序同级 `data/`，升级前备份。关闭主窗口会退出该进程；持续挂机可使用 `toBili.exe --tray`。任务只在程序运行时执行，不能替代电脑开机和联网。
+## 数据与运行方式
 
-> 从旧版迁移：本次是独立重写的实现，数据格式不同。请在新文件夹使用新版，保留旧版及其数据备份，不要直接把旧 `data/` 覆盖进来。[迁移说明](docs/public/MIGRATION.md)
-
-## 数据去哪里
-
-- **本机保存**：账号凭据、参与历史、待参与队列、消息标记和定时设置。Windows 凭据使用当前系统用户的 DPAPI 加密，Mac 使用登录钥匙串保管加密密钥。
-- **公开目录只读**：匿名获取奖品、原动态、公开 UP 信息和开奖时间；不上传账号、参与记录或私信。目录不可用时，其他来源仍可使用。
-- **模型按需接入**：配置自己的兼容接口后，待识别的正文或图片会发送给该模型服务。优先采用官方抽奖组件和正文时间，可结合发布时间推算“下周几”等相对日期。手动修订不会被普通扫描覆盖；默认日期只是估算，详情见[时间与资料校对](docs/public/GUIDE.md#时间与资料校对)。
-- **写入按账号协调**：同一账号在本机串行执行；未知结果不会盲目重发。平台限流、登录失效与接口变化仍可能中断任务，错误可在运行记录中查看。
-
-## 开源版范围
-
-本仓库包含本机多账号、活动中心、挂机运作、模型识别、消息复核、开奖核验、清理和公开目录读取。
+- **账号与历史留在本机。** Windows 用当前系统用户的 DPAPI 加密凭据，Mac 用登录钥匙串保管加密密钥。
+- **公开目录匿名只读。** 获取奖品、原动态、公开 UP 信息和修订，不上传账号、参与记录或私信；目录不可用时仍可使用自己的订阅源。
+- **模型服务由你选择。** 配置模型后，待识别正文、图片或参与文案上下文会发给对应服务。模型密钥保存在本机保险库。
+- **时间可以校对。** 明确开奖时间优先；估算日期不是官方确认时间。手动修订会保留，详细规则见[时间与资料校对](docs/public/GUIDE.md#时间与资料校对)。
+- **执行按本机账号串行。** 本机锁不协调另一台电脑；不要让多台设备同时为同一账号执行参与任务。接口变化、网络与平台限制仍可能影响运行。
 
 ## 从源码运行
 
@@ -113,7 +120,7 @@ Windows 需要 WebView2 Runtime。数据库保存在程序同级 `data/`，升�
 ```bash
 git clone https://github.com/menyuhe/toBili.git
 cd toBili
-uv sync
+uv sync --locked
 cd ui
 npm ci
 npm run build
@@ -121,10 +128,10 @@ cd ..
 uv run tobili serve --port 8848
 ```
 
-浏览器打开 `http://127.0.0.1:8848`。macOS 的安装、数据位置与原生构建步骤见 [Mac 使用说明](docs/public/MAC.md)。两平台共用界面和业务代码。
+浏览器打开 `http://127.0.0.1:8848`。Windows 与 macOS 共用界面和业务代码。
 
-[构建与验证](docs/public/GUIDE.md#验证与参与开发) · [项目结构](PROJECT.md)
+[构建与验证](docs/public/GUIDE.md#验证与参与开发) · [Mac 原生构建](docs/public/MAC.md) · [项目结构](PROJECT.md) · [反馈与协作](https://github.com/menyuhe/toBili/issues)
 
 ## 项目说明
 
-当前实现使用 **AGPL-3.0-or-later**，见 [LICENSE](LICENSE)。历史版本及其许可证保留在原标签中。toBili 是非官方工具，与哔哩哔哩无隶属关系。
+当前实现使用 **AGPL-3.0-or-later**，见 [LICENSE](LICENSE)。历史版本与许可证保留在原标签中。toBili 是非官方工具，与哔哩哔哩无隶属关系。

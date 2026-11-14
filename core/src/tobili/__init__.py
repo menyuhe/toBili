@@ -4,5 +4,5 @@
 `domain` 不知道网络与磁盘的存在；`adapters` 知道全部细节，但不做业务判断。
 """
 
-__version__ = "0.2.27"
+__version__ = "0.2.29"
 __all__ = ["__version__"]

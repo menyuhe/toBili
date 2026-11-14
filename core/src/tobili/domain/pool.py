@@ -166,3 +166,7 @@ def summarize(rows: Sequence[PoolItem]) -> dict[str, int]:
     for row in rows:
         counts[row.state.value] += 1
     return counts
+
+
+class EmptyPool(PoolRejected):
+    """No eligible queue items; the scheduler can wait for the next interval."""

@@ -80,3 +80,7 @@ class SchemaTooNew(RuntimeError):
 
 class WriteUnavailable(RuntimeError):
     """写入权限暂不可用，队列应保留以便下轮继续。"""
+
+
+class TemporaryWriteUnavailable(WriteUnavailable):
+    """Temporary coordination/backup outage; defer the round, never replay a write."""

@@ -7,8 +7,11 @@ import {refreshAll,toast} from '../store'
 import Countdown from '../components/Countdown.vue'
 import Icon from '../components/Icon.vue'
 import AccountAvatar from '../components/AccountAvatar.vue'
+import AccountStatus from '../components/AccountStatus.vue'
+import QrLogin from '../components/QrLogin.vue'
 type Item=AccountRow&{active:{label?:string;note?:string;since?:string};next?:{label:string;at:number};running:boolean;enabled:string[];pending:number;hourly_used:number;recent?:{at:string;note:string};uid_full?:string;unread?:number|null}
 const rows=ref<Item[]>([]),error=ref(''),at=ref(''),busy=ref(0),loading=ref(true)
+const relogin=ref(0)
 const router=useRouter();let alive=true,timer:ReturnType<typeof setInterval>|undefined
 const running=computed(()=>rows.value.filter(r=>r.running).length)
 /** 侧栏那个红点只算**当前账号**的未读 —— 但页面右侧摆着好几个号，人自然以为
@@ -19,8 +22,9 @@ function when(v:string|number){return new Date(typeof v==='number'?v*1000:v).toL
 /** 一张卡片的性格由这四种状态决定，颜色也由它决定：
  *  正在跑 / 已开启待机 / 未开启 / 需登录。以前只有一条细边框，
  *  一屏六张卡看不出哪张在动。 */
-function tone(r:Item){if(!r.ready)return 'tone-warn';if(r.active.label)return 'tone-accent';if(r.running)return 'tone-ok';return 'tone-discover'}
-function stateText(r:Item){if(!r.ready)return '需登录';if(r.active.label)return '执行中';if(r.running)return '待机';return '未开启'}
+function needsLogin(r:Item){return !r.ready||r.session?.state==='login_required'}
+function tone(r:Item){if(needsLogin(r))return 'tone-warn';if(r.active.label)return 'tone-accent';if(r.running)return 'tone-ok';return 'tone-discover'}
+function stateText(r:Item){if(needsLogin(r))return '需登录';if(r.active.label)return '执行中';if(r.running)return '待机';return '未开启'}
 async function load(){try{const data=await req<{items:Item[];at:string}>('/api/standby');if(alive){rows.value=data.items;at.value=data.at;error.value=''}}catch(e){if(alive)error.value=String(e)}finally{loading.value=false}}
 async function open(r:Item,path:string){if(busy.value||!r.ready||!await canChangeAccount())return;busy.value=r.id;try{if(!r.current){await api.switchAccount(r.id);await refreshAll()}await router.push(path)}catch(e){toast(String(e),'danger')}finally{busy.value=0}}
 onMounted(()=>{void load();timer=setInterval(()=>void load(),5000)})
@@ -43,13 +47,15 @@ onUnmounted(()=>{alive=false;if(timer)clearInterval(timer)})
   </header>
 
   <div class="account-body">
+    <AccountStatus :account="r" @login="relogin=r.id"/>
+    <div v-if="relogin===r.id" class="panel p-3"><p>请用「{{r.nickname}}」扫码，原资料与排期保留。</p><QrLogin @done="relogin=0;load()"/><button @click="relogin=0">关闭</button></div>
     <div class="label-row">
       <span class="label">待参与</span>
       <span v-if="r.next" class="next-line"><Icon name="clock" :size="14"/><Countdown :at="r.next.at"/></span>
       <span v-else class="next-line muted">暂无排期</span>
     </div>
     <div class="hero"><strong>{{r.pending}}</strong><span class="hero-unit">条</span></div>
-    <span class="card-meta">{{r.active.label||(!r.ready?'登录后继续':r.running?'等待下一项':'暂无任务')}}{{r.active.since?' · 开始于 '+when(r.active.since):''}}</span>
+    <span class="card-meta">{{r.active.label||(needsLogin(r)?'登录后继续':r.running?'等待下一项':'暂无任务')}}{{r.active.since?' · 开始于 '+when(r.active.since):''}}</span>
 
     <div class="card-divider" />
 

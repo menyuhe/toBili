@@ -14,8 +14,16 @@ export class ApiError extends Error {
 }
 
 export async function req<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const controller = new AbortController()
+  const reading = !init.method || init.method === 'GET'
+  const abort = () => controller.abort()
+  init.signal?.addEventListener('abort', abort, { once: true })
+  if (init.signal?.aborted) controller.abort()
+  const timer = reading ? setTimeout(abort, 20000) : undefined
+  try {
   const response = await fetch(path, {
     ...init,
+    signal: controller.signal,
     headers: { 'Content-Type': 'application/json', ...(init.headers || {}) },
   })
   if (!response.ok) {
@@ -30,6 +38,14 @@ export async function req<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   if (response.status === 204) return undefined as T
   return (await response.json()) as T
+  } catch (error) {
+    if (controller.signal.aborted && !init.signal?.aborted)
+      throw new ApiError(408, '读取超时，请重试；后台任务未被停止')
+    throw error
+  } finally {
+    if (timer) clearTimeout(timer)
+    init.signal?.removeEventListener('abort', abort)
+  }
 }
 
 export const post = <T>(path: string, body?: unknown) =>
@@ -58,6 +74,14 @@ export interface AccountRow extends Profile {
   id: number
   current: boolean
   ready: boolean
+  session?: AccountSession
+}
+
+export interface AccountSession {
+  state: 'unknown' | 'checking' | 'valid' | 'unavailable' | 'login_required'
+  note: string
+  checked_at: number
+  checking?: boolean
 }
 
 export interface Gate {

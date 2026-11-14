@@ -13,6 +13,7 @@ import { api, type AccountRow } from '../api'
 import { refreshAll, state, toast } from '../store'
 import QrLogin from './QrLogin.vue'
 import AccountAvatar from './AccountAvatar.vue'
+import AccountStatus from './AccountStatus.vue'
 import { canChangeAccount } from '../workGuard'
 
 const open = ref(false)
@@ -126,6 +127,7 @@ onUnmounted(() => document.removeEventListener('click', close))
           <div class="min-w-0 flex-1">
             <div class="text-[13.5px] font-medium truncate">{{ row.nickname }}</div>
             <div class="text-[11.5px] muted truncate">{{ sub(row) }}</div>
+            <AccountStatus :account="row" @login="addAccount"/>
           </div>
           <span v-if="row.current" class="text-[11px] px-1.5 py-0.5 rounded" style="background: var(--accent-soft); color: var(--accent)">当前</span>
           <button
@@ -178,7 +180,8 @@ onUnmounted(() => document.removeEventListener('click', close))
   position: absolute;
   right: 0;
   top: calc(100% + 8px);
-  width: 264px;
+  width: 340px;
+  max-width: calc(100vw - 24px);
   z-index: 50;
   border-radius:var(--radius-panel);
   border: 1px solid var(--line);

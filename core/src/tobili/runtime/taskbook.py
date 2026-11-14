@@ -4,7 +4,8 @@ import json
 import threading
 import time
 
-from ..domain.errors import Fault, RemoteError
+from ..domain.errors import Fault, MissingCredential, RemoteError, TemporaryWriteUnavailable
+from ..domain.pool import EmptyPool
 from .lane import BusyAccount
 from .redact import safe_exception
 from .work_priority import participation_turn, requested
@@ -44,6 +45,12 @@ class TaskBook:
         self.runners = {}
         self.active = {}
 
+    def due_at(self, owner, key):
+        settings = self.box.repos.settings
+        retry = float(settings.get(owner, f"tasks.retry.{key}", "0"))
+        at = retry or float(settings.get(owner, f"tasks.due.{key}", "0"))
+        return max(at, float(settings.get(owner, "tasks.cooldown", "0")))
+
     def config(self, owner):
         raw = self.box.repos.settings.get(owner, KEY, "")
         if raw:
@@ -78,8 +85,7 @@ class TaskBook:
         if config["running"]:
             for task in config["tasks"]:
                 if task["enabled"] and task["key"] != self.active.get(owner, {}).get("key"):
-                    at = float(settings.get(owner, f"tasks.due.{task['key']}", "0"))
-                    at = max(at, float(settings.get(owner, "tasks.cooldown", "0")))
+                    at = self.due_at(owner, task["key"])
                     if TASKS[task["key"]][1]:
                         at = max(at, source_slot(self.box, owner, task["key"]))
                     upcoming.append(dict(key=task["key"], label=TASKS[task["key"]][0], at=at))
@@ -111,7 +117,15 @@ class TaskBook:
             "hourly_used": len(self.attempts(owner)),
             "states": {
                 key: {
-                    "next_at": settings.get(owner, f"tasks.due.{key}", ""),
+                    "next_at": str(self.due_at(owner, key)),
+                    "latest": next(
+                        (
+                            r
+                            for r in json.loads(settings.get(owner, f"tasks.history.{key}", "[]"))
+                            if key != "participate" or r.get("applied", True)
+                        ),
+                        None,
+                    ),
                     "history": json.loads(settings.get(owner, f"tasks.history.{key}", "[]")),
                 }
                 for key in TASKS
@@ -205,7 +219,7 @@ class TaskBook:
                 return
 
             def due(t):
-                at = float(self.box.repos.settings.get(owner, f"tasks.due.{t['key']}", "0"))
+                at = self.due_at(owner, t["key"])
                 return max(at, source_slot(self.box, owner, t["key"])) if TASKS[t["key"]][1] else at
 
             ready = [t for t in active if due(t) <= time.time()]
@@ -230,8 +244,10 @@ class TaskBook:
 
     def run(self, owner, key, config, *, apply=False, scheduled=False):
         box = self.box
+        plan_at_start = self.config(owner)
         result = {
             "at": box.clock.now().isoformat(),
+            "applied": apply,
             "ok": True,
             "scanned": 0,
             "written": 0,
@@ -372,6 +388,8 @@ class TaskBook:
                     if scheduled and feed_due:
                         result["next_seconds"] = max(60, min(feed_due) - time.time())
                 elif key == "participate":
+                    if apply and box.account_health.view(owner)["state"] == "login_required":
+                        raise MissingCredential("登录已失效，请重新扫码；原排期保留")
                     if apply and box.check_writer:
                         box.check_writer(owner)
                     if apply and scheduled:
@@ -509,9 +527,31 @@ class TaskBook:
                 elif key == "cleanup":
                     r = box.plan_tidy().run(owner, limit=50, persist=False)
                     result.update(scanned=len(r.lines), note=f"可清理 {r.clearable} 条")
+        except EmptyPool:
+            result.update(ok=True, note="暂无待参与活动，按原排期等待新活动")
         except BusyAccount:
             result.update(ok=False, note="账号正在执行其他任务，稍后再试")
             box.repos.settings.put(owner, f"tasks.due.{key}", str(time.time() + 60))
+        except TemporaryWriteUnavailable as exc:
+            result.update(
+                ok=False,
+                retrying=True,
+                next_seconds=60,
+                note=f"{safe_exception(exc)}；"
+                + (
+                    "本轮暂停，60 秒后自动重试，原排期保持启用"
+                    if self.compatible(owner, key, plan_at_start)
+                    else "本次暂停，连接恢复后可重试"
+                ),
+            )
+        except MissingCredential:
+            box.account_health.record(owner, "login_required", "登录已失效，请重新扫码；原排期保留")
+            result.update(
+                ok=False,
+                login_required=True,
+                next_seconds=300,
+                note="登录已失效，请重新扫码；原排期保留，登录后自动继续",
+            )
         except RemoteError as exc:
             if exc.fault in (Fault.RISK, Fault.RATE_LIMIT, Fault.NETWORK, Fault.TIMEOUT):
                 box.repos.settings.put(owner, "tasks.cooldown", str(time.time() + 900))
@@ -523,6 +563,11 @@ class TaskBook:
                 )
             else:
                 result.update(ok=False, note=safe_exception(exc))
+                if exc.fault is Fault.AUTH:
+                    box.account_health.record(
+                        owner, "login_required", "登录已失效，请重新扫码；原排期保留"
+                    )
+                    result.update(login_required=True, next_seconds=300)
         except Exception as exc:
             result.update(ok=False, note=safe_exception(exc))
         finally:
@@ -538,6 +583,8 @@ class TaskBook:
                 and key == "participate"
                 and not result["ok"]
                 and not result.get("cooldown")
+                and not result.get("retrying")
+                and not result.get("login_required")
             ):
                 current = self.config(owner)
                 if self.compatible(owner, key, config):
@@ -547,6 +594,18 @@ class TaskBook:
                     current["running"] = any(t["enabled"] for t in current["tasks"])
                     box.repos.settings.put(owner, KEY, json.dumps(current))
                     result["note"] += "；真实参与已停用，处理问题后重新勾选并保存"
+            retry_key = f"tasks.retry.{key}"
+            if result.get("retrying") and self.compatible(owner, key, plan_at_start):
+                box.repos.settings.put(owner, retry_key, str(time.time() + result["next_seconds"]))
+            elif result["ok"] and (key != "participate" or apply):
+                if float(box.repos.settings.get(owner, retry_key, "0")) and self.compatible(
+                    owner, key, plan_at_start
+                ):
+                    minutes = next(t["minutes"] for t in plan_at_start["tasks"] if t["key"] == key)
+                    box.repos.settings.put(
+                        owner, f"tasks.due.{key}", str(time.time() + minutes * 60)
+                    )
+                box.repos.settings.put(owner, retry_key, "0")
             history_key = f"tasks.history.{key}"
             history = json.loads(box.repos.settings.get(owner, history_key, "[]"))
             box.repos.settings.put(owner, history_key, json.dumps([result, *history][:20]))
