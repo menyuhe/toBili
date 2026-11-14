@@ -50,7 +50,7 @@ def has_component(item):
     )
 
 
-def notice_facts(notice, bid, kind):
+def notice_facts(notice, bid, kind, *, origin="notice"):
     if not isinstance(notice, Mapping) or not notice.get("lottery_id"):
         return None
     if str(notice.get("business_id")) != bid or str(notice.get("business_type")) != str(kind):
@@ -81,7 +81,44 @@ def notice_facts(notice, bid, kind):
         deadline,
         "ended" if ended else "active",
         "官方已公布获奖名单" if winners else "官方抽奖已结束" if ended else "",
+        origin,
     )
+
+
+def probe_notice(wire, dyn_id, *, kinds=(1, 12)):
+    """没有抽奖组件的动态，也去官方索引里问一次。
+
+    组件是"渲染出来的结果"，不是"活动的存在证明"：同一个 UP 发的同一类抽奖，
+    在话题卡片、转发态、Opus 详情的不同读法下，组件可能压根不出现，但官方公告
+    仍然在。反过来，靠正文正则认出来的"抽奖"，绝大多数在官方索引里查无此项 ——
+    这就是"猜出来的活动"和"官方登记过的活动"之间唯一可靠的界线。
+
+    返回 `None` 表示官方索引里确实没有这条动态。中途遇到风控/网络问题按异常上抛，
+    因为"查不到"和"没查成"必须分开：前者是结论，后者不是。
+    """
+    for kind in kinds:
+        try:
+            response = wire.fetch(
+                endpoints.LOTTERY_NOTICE,
+                query={"business_id": str(dyn_id), "business_type": kind},
+                referer=endpoints.dyn_referer(str(dyn_id)),
+            )
+        except RemoteError as exc:
+            if exc.fault in (
+                Fault.AUTH,
+                Fault.RISK,
+                Fault.RATE_LIMIT,
+                Fault.NETWORK,
+                Fault.TIMEOUT,
+            ):
+                raise
+            continue
+        if codes.code_of(response) != codes.OK:
+            continue
+        facts = notice_facts(response.get("data"), str(dyn_id), kind)
+        if facts:
+            return facts
+    return None
 
 
 def read_draw(wire, item):
@@ -90,7 +127,7 @@ def read_draw(wire, item):
     if kind == 1 and not has_component(item):
         return None
     if kind == 12:
-        return DrawFacts(bid, kind, state="unsupported", reason=closed)
+        return DrawFacts(bid, kind, state="unsupported", reason=closed, origin="component")
     if not bid:
         return DrawFacts(reason="官方组件缺少活动编号")
     try:
@@ -100,7 +137,7 @@ def read_draw(wire, item):
             referer=endpoints.dyn_referer(str(item.get("id_str") or bid)),
         )
         codes.ensure_ok(response, what="读取官方抽奖详情")
-        facts = notice_facts(response.get("data"), bid, kind)
+        facts = notice_facts(response.get("data"), bid, kind, origin="component")
         if facts:
             if closed and facts.state != "ended":
                 from dataclasses import replace
@@ -113,6 +150,7 @@ def read_draw(wire, item):
                 kind,
                 state="ended" if closed else "unverified",
                 reason=closed or "官方组件未返回抽奖详情，禁止按普通转发参与",
+                origin="component",
             )
         return None
     except RemoteError as exc:
@@ -123,6 +161,13 @@ def read_draw(wire, item):
             kind,
             state="ended" if closed else "unverified",
             reason=closed or "官方抽奖详情暂不可核实",
+            origin="component",
         )
     except (ValueError, TypeError, OverflowError):
-        return DrawFacts(bid, kind, state="unverified", reason="官方抽奖字段不完整或活动编号不匹配")
+        return DrawFacts(
+            bid,
+            kind,
+            state="unverified",
+            reason="官方抽奖字段不完整或活动编号不匹配",
+            origin="component",
+        )

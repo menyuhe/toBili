@@ -98,6 +98,24 @@ def test_ui_is_served_from_bundle(tmp_path) -> None:  # type: ignore[no-untyped-
         assert client.get("/api/health").json() == {"status": "ok"}  # 兜底不能吃掉 API
 
 
+def test_index_html_is_never_cached(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """index.html 必须每次回源。
+
+    内嵌窗口是 WebView2：响应没有缓存头时，它按 Last-Modified 猜一个新鲜期，
+    于是换了程序、窗口里仍是上一版的页面（asset 文件名都指向旧包）。现场症状是
+    浏览器 Ctrl+F5 能看到新版本，桌面窗口怎么重开都停在旧版本号。
+    """
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("<html>toBili</html>", encoding="utf-8")
+
+    app = create_app(home=str(tmp_path / "home"), bundle=dist)
+    with TestClient(app) as client:
+        for path in ("/", "/tidy", "/version.json"):
+            headers = client.get(path).headers
+            assert "no-store" in headers.get("cache-control", ""), path
+
+
 def test_api_works_without_bundle(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """没有构建产物时 API 照常起 —— 否则只跑后端的人第一步就卡住。"""
     app = create_app(home=str(tmp_path / "home"), bundle=tmp_path / "nope")
@@ -263,3 +281,41 @@ def test_ipv6_loopback_host_is_fine(client: TestClient) -> None:
 def test_bad_host_blocks_static_too(client: TestClient) -> None:
     # 中间件在最外层：这个进程里没有哪条路径是给外人看的。
     assert client.get("/tidy", headers={"host": "evil.example.com"}).status_code == 403
+
+
+def test_scheduled_round_lands_in_its_own_category(client: TestClient) -> None:
+    """一轮话题更新不该出现在「参与」里。
+
+    以前 schedule.round 整个主题被归到参与，于是"话题更新"和"参与活动"在日志里
+    长得一模一样，排查时会直接把人带偏。
+    """
+    box = client.app.state.container  # type: ignore[attr-defined]
+    box.bus.publish(
+        "schedule.round",
+        {"account_id": None, "task": "topics", "title": "话题更新 · 更新 1 个来源，识别 1 条活动"},
+    )
+    box.bus.publish(
+        "schedule.round",
+        {"account_id": None, "task": "participate", "title": "参与活动 · 已完成 2 条"},
+    )
+    sources = client.get("/api/history", params={"category": "sources"}).json()["items"]
+    participation = client.get("/api/history", params={"category": "participation"}).json()["items"]
+    assert any("话题更新" in item["payload"].get("title", "") for item in sources)
+    assert all("话题更新" not in item["payload"].get("title", "") for item in participation)
+    assert any(item["label"] == "话题" for item in sources)
+
+
+def test_dismissed_issue_disappears_from_history(client: TestClient) -> None:
+    """异常可以被「知道了」压掉，但动作本身留痕。"""
+    box = client.app.state.container  # type: ignore[attr-defined]
+    box.bus.publish("settle", {"ok": False, "problems": ["读不到官方开奖结果"]})
+    items = client.get("/api/history", params={"issues_only": True}).json()["items"]
+    assert items, "刚发的失败事件应当在异常里"
+    seq = items[0]["seq"]
+    assert client.post("/api/history/dismiss", json={"seq": seq}).status_code == 200
+    after = client.get("/api/history", params={"issues_only": True}).json()["items"]
+    assert all(item["seq"] != seq for item in after)
+    kept = (
+        box.db.connect().execute("SELECT note FROM event_dismissal WHERE seq=?", (seq,)).fetchone()
+    )
+    assert kept is not None

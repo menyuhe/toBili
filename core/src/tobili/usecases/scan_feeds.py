@@ -38,6 +38,8 @@ class ScanReport:
     model_cache_hits: int = 0
     model_extracted: int = 0
     reused: int = 0
+    official: int = 0
+    guessed: int = 0
 
     @property
     def duplicates(self) -> int:
@@ -51,7 +53,15 @@ class ScanReport:
 
 class ScanFeeds:
     def __init__(
-        self, *, gateway: Gateway, feeds: FeedRepo, campaigns, clock: Clock, model=None, events=None
+        self,
+        *,
+        gateway: Gateway,
+        feeds: FeedRepo,
+        campaigns,
+        clock: Clock,
+        model=None,
+        events=None,
+        index: bool = True,
     ) -> None:
         self._gateway = gateway
         self._feeds = feeds
@@ -59,6 +69,11 @@ class ScanFeeds:
         self._clock = clock
         self._model = model
         self._events = events
+        # 索引优先：没有抽奖组件的动态也去官方索引问一次。关掉它就退回
+        # "只认渲染出来的组件"，广度会回来，但猜出来的活动也会一起回来。
+        self._index = index
+        self._official = 0
+        self._guessed = 0
 
     def _event(self, source, owner, phase, **fields):
         if not self._events:
@@ -284,6 +299,8 @@ class ScanFeeds:
             model_calls=getattr(self._model, "calls", 0),
             model_cache_hits=getattr(self._model, "hits", 0),
             model_extracted=getattr(self._model, "extracted", 0),
+            official=self._official,
+            guessed=self._guessed,
         )
 
     def _build(self, item: FeedItem, *, now, label: str) -> Campaign | None:
@@ -302,12 +319,14 @@ class ScanFeeds:
                 up_name=detail.up_name or item.up_name,
                 published_at=detail.published_at or item.published_at,
             )
+        if draw is None:
+            draw = self._from_index(item.dyn_id)
         reference = (item.published_at or now).astimezone(timezone(timedelta(hours=8)))
         from ..domain.participation import is_roundup
 
         if draw is None and is_roundup(item.text):
             return None
-        if draw:
+        if draw and draw.business_type:
             from ..domain.campaign import CampaignKind
 
             kind = (
@@ -318,10 +337,22 @@ class ScanFeeds:
                 else CampaignKind.UNKNOWN
             )
             deadline, reward = draw.deadline, draw.reward
+            if not (deadline and reward) and not draw.verified:
+                # 组件在、详情查不到（预约卡片常见）。这类活动仍然只算线索，
+                # 但正文里的奖品/时间比空着有用，用它兜底而不是覆盖结论。
+                _kind, guessed_deadline, guessed_reward = facts_for(item, reference, self._model)
+                deadline = deadline or guessed_deadline
+                reward = reward or guessed_reward
         else:
             kind, deadline, reward = facts_for(item, reference, self._model)
         if kind.value in ("unknown", "check_in"):
             return None
+        # 报告口径：有官方依据（组件或公告）的算一条"可写"，其余都是线索。
+        # 组件路径也要算进来 —— 它是官方率最高的一条路，漏掉就会让报告永远显示 0。
+        if draw is not None and draw.origin:
+            self._official += 1
+        else:
+            self._guessed += 1
         original_kind = kind_from(item.text)
         original_deadline = deadline_from(
             item.text, now=reference, allow_relative=item.published_at is not None
@@ -348,6 +379,33 @@ class ScanFeeds:
             body_text=item.text,
             draw=draw,
         )
+
+    def _from_index(self, dyn_id: str):
+        """问一次官方抽奖索引，把"这条到底有没有在官方登记过"变成结论。
+
+        三种返回必须分清，混起来就会出现"一次网络抖动把真活动降级成线索"：
+
+            DrawFacts(active/ended)  索引里有 —— 奖品和开奖时间都是官方字段
+            DrawFacts(unverified)    索引里没有，或者这次没查成 —— 只当线索
+            None                     没开这个能力，维持原来的推断路径
+
+        "没有"和"没查成"都落到 unverified，是因为它们对下游的影响完全一样（都不进
+        候选），差别只写在理由里给人看，不写进状态里骗人。
+        """
+        from ..domain.draw import DrawFacts
+
+        probe = getattr(self._gateway, "index_draw", None)
+        if not self._index or probe is None:
+            return None
+        try:
+            facts = probe(dyn_id)
+        except Exception as exc:
+            return DrawFacts(
+                state="unverified", reason=f"官方索引暂不可核实：{safe_exception(exc)}"
+            )
+        if facts is not None:
+            return facts
+        return DrawFacts(state="unverified", reason="官方抽奖索引无此活动")
 
 
 def _headline(text: str, limit: int = 80) -> str:

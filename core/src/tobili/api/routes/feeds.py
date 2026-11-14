@@ -212,4 +212,6 @@ def scan(
         "model_cache_hits": report.model_cache_hits,
         "model_extracted": report.model_extracted,
         "reused": report.reused,
+        "official": report.official,
+        "guessed": report.guessed,
     }

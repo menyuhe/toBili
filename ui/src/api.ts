@@ -182,6 +182,10 @@ export interface ScanReport {
   matched: number
   unique: number
   duplicates: number
+  /** 这轮里能对上官方抽奖索引的条数 */
+  official?: number
+  /** 只能靠正文推断、没有官方依据的条数 */
+  guessed?: number
   sources: Record<string, number>
   problems: string[]
 }
@@ -420,8 +424,8 @@ export const api = {
   discover: (keyword: string, limit = 10, apply = false) =>
     post<DiscoverReport>('/api/feeds/discover', { keyword, limit, apply }),
 
-  inbox: (pages = 1, limit = 60) =>
-    req<InboxView>(`/api/inbox?pages=${pages}&limit=${limit}`),
+  inbox: (pages = 1, limit = 60, refresh = false) =>
+    req<InboxView>(`/api/inbox?pages=${pages}&limit=${limit}${refresh ? '&refresh=1' : ''}`),
   markSeen: (keys: string[], account_id?: number) => post<{ marked: number }>('/api/inbox/seen', { keys, account_id }),
   clearSeen: () => req<{ state: string }>('/api/inbox/seen', { method: 'DELETE' }),
 
@@ -489,13 +493,13 @@ export const api = {
   runPool: (limit = 0) =>
     post<PoolRunReport>('/api/pool/run', { apply: true, limit }),
 
-  campaigns: (params: { keyword?: string; kind?: string; state?: string; statuses?:string; prize_state?:string; availability?:string; time_field?:string; after?:string; before?:string; order?:string; limit?: number; offset?: number } = {}) => {
+  campaigns: (params: { keyword?: string; kind?: string; state?: string; statuses?:string; prize_state?:string; availability?:string; official?:string; time_field?:string; after?:string; before?:string; order?:string; limit?: number; offset?: number } = {}) => {
     const query = new URLSearchParams()
     for (const [key, value] of Object.entries(params)) {
       if (value !== undefined && value !== '') query.set(key, String(value))
     }
     const suffix = query.toString()
-    return req<{ items: CampaignRow[]; total: number }>(
+    return req<{ items: CampaignRow[]; total: number; counts: Record<string, number> }>(
       `/api/campaigns${suffix ? `?${suffix}` : ''}`,
     )
   },

@@ -53,3 +53,9 @@ def test_release_bump_updates_own_packages_only(tmp_path):
     assert 'name = "example"\nversion = "0.2.0"' in (tmp_path / "uv.lock").read_text()
     with pytest.raises(ValueError):
         release.bump("0.2.0", tmp_path)
+    # A hand-edited core version must not leave the other packages on an older release.
+    (tmp_path / "core/src/tobili/__init__.py").write_text('__version__ = "0.2.7"')
+    release.bump("0.2.7", tmp_path, sync=True)
+    assert json.loads((tmp_path / "ui/package.json").read_text())["version"] == "0.2.7"
+    assert 'version = "0.2.7"' in (tmp_path / "core/pyproject.toml").read_text()
+    assert 'name = "example"\nversion = "0.2.0"' in (tmp_path / "uv.lock").read_text()

@@ -194,6 +194,7 @@ class Container:
             campaigns=self.repos.campaigns,
             clock=self.clock,
             events=self.bus,
+            index=self.repos.settings.get(0, "scan.official_index", "1") != "0",
         )
 
     def manage_feeds(self) -> ManageFeeds:
@@ -346,7 +347,9 @@ class Container:
                 or "；".join(item.problems)
                 or f"候选 {item.candidates} 条，写入 {written} 条"
             )
-        self.bus.publish("schedule.round", {"account_id": owner, "title": note})
+        self.bus.publish(
+            "schedule.round", {"account_id": owner, "task": "participate", "title": note}
+        )
         return {"ok": ok, "scanned": scanned, "written": written, "note": note}
 
     def manage_pool(self) -> ManagePool:

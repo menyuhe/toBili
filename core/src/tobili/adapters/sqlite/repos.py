@@ -11,7 +11,7 @@ import json
 import time
 from collections.abc import Sequence
 from contextlib import contextmanager, suppress
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from ...domain.action import ActionKind
 from ...domain.campaign import Campaign, CampaignKind
@@ -237,14 +237,24 @@ class FeedRepo:
                         status[0] > now if automatic else status[1] > now - 60 and not unfinished
                     )
                 if not blocked:
+                    # 话题流是广撒网：一页 20 条里能确认成活动的常常不到一条，但每轮
+                    # 都要为它发一次请求。默认 5 分钟是"同一轮别重复扫"的下限，
+                    # 话题可以按设置拉长到几小时，把请求额度留给专栏索引。
+                    gap = 300.0
+                    if source["kind"] == "topic":
+                        limit = db.execute(
+                            "SELECT value FROM setting WHERE account_id=0 AND key='sources.topic.interval_hours'"
+                        ).fetchone()
+                        with suppress(TypeError, ValueError):
+                            gap = max(gap, float(limit[0]) * 3600) if limit else gap
                     db.execute(
                         "INSERT INTO feed_refresh(feed_id,next_at) VALUES(?,?) ON CONFLICT(feed_id) DO UPDATE SET next_at=max(next_at,excluded.next_at)",
-                        (fid, now + 300),
+                        (fid, now + gap),
                     )
                     if automatic:
                         db.execute(
                             "INSERT INTO setting VALUES(0,'sources.shared.next_slot',?) ON CONFLICT(account_id,key) DO UPDATE SET value=excluded.value",
-                            (str(now + 300),),
+                            (str(now + gap),),
                         )
             if blocked:
                 yield None
@@ -399,7 +409,7 @@ class CampaignRepo:
                     ).fetchone()
                     manual = bool(edited and "deadline_at" in json.loads(edited[0]))
                 conn.execute(
-                    "UPDATE campaign SET draw_business_id=?,draw_business_type=?,draw_state=CASE WHEN draw_state='ended' THEN draw_state ELSE ? END,draw_checked_at=?,draw_reason=CASE WHEN draw_state='ended' AND ?='' THEN draw_reason ELSE ? END WHERE id=?",
+                    "UPDATE campaign SET draw_business_id=?,draw_business_type=?,draw_state=CASE WHEN draw_state='ended' THEN draw_state ELSE ? END,draw_checked_at=?,draw_reason=CASE WHEN draw_state='ended' AND ?='' THEN draw_reason ELSE ? END,official_state=CASE WHEN ?!='' THEN ? ELSE official_state END WHERE id=?",
                     (
                         draw.business_id,
                         draw.business_type,
@@ -407,6 +417,8 @@ class CampaignRepo:
                         now,
                         draw.reason,
                         draw.reason,
+                        draw.origin,
+                        draw.origin,
                         row["id"],
                     ),
                 )
@@ -513,6 +525,7 @@ class CampaignRepo:
         order: str = "newest",
         prize_state: str = "",
         availability: str = "",
+        official: str = "",
     ) -> dict[str, object]:
         """活动库。一个活动的四种身份拼在一行里：它是什么、我报了没、判成什么、清没清。
 
@@ -525,25 +538,46 @@ class CampaignRepo:
             from ...usecases.catalog_policy import enabled
 
             if enabled(self._db):
-                where.extend(
-                    [
-                        "c.kind NOT IN ('unknown','check_in')",
-                        "c.reward_status IN ('verified','manual')",
-                        "trim(c.reward)!=''",
-                        "c.draw_state NOT IN ('ended','unverified','unsupported')",
-                        f"{_EXPIRES}>strftime('%Y-%m-%dT%H:%M:%S+00:00','now')",
-                    ]
-                )
+                where.append("c.kind NOT IN ('unknown','check_in')")
+                # 目录策略默认只留"奖品已识别、还没开奖"的行。但 `official` 是
+                # 显式按依据筛的维度：线索池里全是没核对的，套上那几条就永远是
+                # 0 条；官方池也不该被"奖品待补全"挡在外面。
+                if not official:
+                    where.extend(
+                        [
+                            "c.reward_status IN ('verified','manual')",
+                            "trim(c.reward)!=''",
+                            "c.draw_state NOT IN ('ended','unverified','unsupported')",
+                        ]
+                    )
+                where.append(f"{_EXPIRES}>strftime('%Y-%m-%dT%H:%M:%S+00:00','now')")
         if state not in ("review", "all_records", "cleaned", "shelved"):
             where.append("NOT EXISTS(SELECT 1 FROM up_block b WHERE b.uid=c.up_uid AND b.active=1)")
         filters: list[object] = []
         if prize_state == "unknown":
             where.append("c.reward_status='unknown'")
+        elif prize_state == "known":
+            # 只保留奖品名真正可用的行：识别过的，或者人工补过的。
+            # 专栏整理要的是"能写进文章"的活动，缺奖品名的那批不该出现在候选里。
+            where.append("c.reward_status IN ('verified','manual')")
+            where.append("trim(coalesce(c.reward,''))!=''")
         if availability == "open":
             where.append("c.draw_state NOT IN ('ended','unverified','unsupported')")
             where.append(
                 f"({_EXPIRES} IS NULL OR {_EXPIRES}>strftime('%Y-%m-%dT%H:%M:%S+00:00','now'))"
             )
+        if official == "exact":
+            # 能直接写进稿子：有官方依据，且开奖时间和奖品都对得上官方公告。
+            # 预约类组件虽然也算官方登记，但它的"截止"是预约截止，不是开奖时间，
+            # 写进图文会误导读者，所以只留在 `official='yes'` 那一档。
+            where.append("c.official_state IN ('component','notice')")
+            where.append("c.draw_state='active'")
+        elif official == "yes":
+            # 有官方登记：组件在，或者公告确认过。预约/充电组件也算。
+            where.append("c.official_state IN ('component','notice')")
+        elif official == "no":
+            # 线索池：看过但没有官方依据。留着给人翻，不进候选。
+            where.append("trim(c.official_state)=''")
         if state not in ("review", "all_records", "cleaned"):
             where.append(
                 ("EXISTS" if state == "shelved" else "NOT EXISTS")
@@ -588,6 +622,10 @@ class CampaignRepo:
             "closed": f"{_EXPIRES}<=strftime('%Y-%m-%dT%H:%M:%S+00:00','now')",
         }
         chosen = [predicates[s] for s in statuses.split(",") if s in predicates]
+        # 参与结果这一条单独记下位置：列表要按它过滤，但顶上的分档卡片必须
+        # 显示"不按它过滤时"的各档数量，否则点一下「中奖」，另外四张卡全变成 0，
+        # 人就再也没法从卡片跳回去了。
+        status_at = len(where) if chosen else -1
         if chosen:
             where.append("(" + " OR ".join(chosen) + ")")
         field = "c.deadline_at" if time_field == "deadline" else "c.published_at"
@@ -631,7 +669,7 @@ class CampaignRepo:
         rows = (
             self._db.connect()
             .execute(
-                "SELECT c.id, c.dyn_id, c.up_uid, c.up_name, c.title, c.reward, CASE WHEN c.draw_business_type=1 THEN 'interactive' ELSE c.kind END AS kind,c.draw_business_type,c.draw_state,c.draw_reason,"
+                "SELECT c.id, c.dyn_id, c.up_uid, c.up_name, c.title, c.reward, CASE WHEN c.draw_business_type=1 THEN 'interactive' ELSE c.kind END AS kind,c.draw_business_type,c.draw_state,c.draw_reason,c.official_state,"
                 " c.deadline_at, c.confidence, c.first_seen_at,c.published_at,c.reward_status,"
                 f" {_DATE_HINT} AS deadline_date, {_EXPIRES} AS expires_at,"
                 " (SELECT s.reason FROM closed_shelf s WHERE s.account_id=? AND s.campaign_id=c.id) AS shelf_reason,"
@@ -673,7 +711,36 @@ class CampaignRepo:
             )
             .fetchone()
         )
-        return {"items": [dict(row) for row in rows], "total": int(total["n"] if total else 0)}
+        # 分档数量要在"未按参与结果过滤"的集合上算，卡片才能当筛选器用。
+        stats = (
+            self._db.connect()
+            .execute(
+                "SELECT"
+                " COALESCE(SUM(CASE WHEN e.id IS NULL THEN 1 ELSE 0 END),0) AS unjoined,"
+                " COALESCE(SUM(CASE WHEN e.id IS NOT NULL THEN 1 ELSE 0 END),0) AS joined,"
+                " COALESCE(SUM(CASE WHEN e.id IS NOT NULL AND (v.outcome IS NULL OR v.outcome='pending') THEN 1 ELSE 0 END),0) AS pending,"
+                " COALESCE(SUM(CASE WHEN v.outcome='won' THEN 1 ELSE 0 END),0) AS won,"
+                " COALESCE(SUM(CASE WHEN v.outcome='lost' THEN 1 ELSE 0 END),0) AS lost,"
+                " COALESCE(SUM(CASE WHEN c.reward_status='unknown' THEN 1 ELSE 0 END),0) AS reward_unknown"
+                + joins
+                + (
+                    f" WHERE {' AND '.join(where[:status_at] + where[status_at + 1 :])}"
+                    if status_at >= 0
+                    else clause
+                ),
+                (account_id, account_id, *filters),
+            )
+            .fetchone()
+        )
+        counts = {
+            key: int(stats[key] if stats else 0)
+            for key in ("unjoined", "joined", "pending", "won", "lost", "reward_unknown")
+        }
+        return {
+            "items": [dict(row) for row in rows],
+            "total": int(total["n"] if total else 0),
+            "counts": counts,
+        }
 
     def recent(self, limit: int = 200, offset: int = 0) -> Sequence[dict[str, object]]:
         """最近看到的活动，新的在前。
@@ -916,14 +983,45 @@ class EnrollmentRepo:
         )
         return [dict(r) for r in rows]
 
-    def record_check(self, account_id, campaign_id, *, now, retry_at, error=""):
+    def record_check(
+        self, account_id, campaign_id, *, now, error="", terminal=False, not_before=None
+    ):
+        """记一次核验尝试，并算出下次什么时候再试。
+
+        退避是必须的：公告可能当场就有，也可能三天后才发。固定 30 分钟重试等于
+        每半小时把所有还没结论的活动全问一遍 —— 库里这类有几百条，很快就变成
+        自己把自己限流。所以第 n 次尝试等 30 分钟 × 2^(n-1)，封顶 12 小时。
+
+        `not_before` 用于"已经知道答案什么时候才有"的情况：预约类的公告里写着
+        开奖时间，那就等过了那个点再来，中间不必占请求。
+
+        `terminal=True` 表示这条**再查也没用**（缺 UP、活动已删、类型不支持），
+        直接标成不再重试，留在台账里等人看，而不是永远排在队尾。
+        """
+        wait = min(12 * 3600, 30 * 60 * 2**6)
         with self._db.write() as conn:
+            row = conn.execute(
+                "SELECT attempts FROM result_probe WHERE account_id=? AND campaign_id=?",
+                (account_id, campaign_id),
+            ).fetchone()
+            attempts = int((row["attempts"] if row else 0) or 0) + 1
+            exhausted = 1 if terminal else 0
+            if terminal:
+                # 终态不是"永远不管"：一个月后再看一眼，万一 UP 信息后来补上了，
+                # 这条还能自己回来，不必让人去改库。
+                retry = now + timedelta(days=30)
+            else:
+                retry = now + timedelta(seconds=min(wait, 30 * 60 * 2 ** min(15, attempts - 1)))
+            if not_before is not None and not_before > retry:
+                retry = not_before
             conn.execute(
-                "INSERT INTO result_probe(account_id,campaign_id,attempted_at,retry_at,error)"
-                " VALUES(?,?,?,?,?) ON CONFLICT(account_id,campaign_id) DO UPDATE SET"
-                " attempted_at=excluded.attempted_at,retry_at=excluded.retry_at,error=excluded.error",
-                (account_id, campaign_id, stamp(now), stamp(retry_at), error),
+                "INSERT INTO result_probe(account_id,campaign_id,attempted_at,retry_at,error,attempts,exhausted)"
+                " VALUES(?,?,?,?,?,?,?) ON CONFLICT(account_id,campaign_id) DO UPDATE SET"
+                " attempted_at=excluded.attempted_at,retry_at=excluded.retry_at,error=excluded.error,"
+                " attempts=excluded.attempts,exhausted=excluded.exhausted",
+                (account_id, campaign_id, stamp(now), stamp(retry), error, attempts, exhausted),
             )
+        return attempts
 
     def by_campaign(self, campaign_id: int) -> Sequence[Enrollment]:
         rows = self._db.connect().execute(
@@ -1531,6 +1629,12 @@ class RunEventRepo:
                 )
             )
             sql += " WHERE " + filters
+        # 被忽略的异常不再出现在任何一栏：留痕在 event_dismissal 里，看得见但不再占位。
+        sql += (
+            " AND NOT EXISTS(SELECT 1 FROM event_dismissal d WHERE d.seq=run_event.seq)"
+            if " WHERE " in sql
+            else " WHERE NOT EXISTS(SELECT 1 FROM event_dismissal d WHERE d.seq=run_event.seq)"
+        )
         sql += " ORDER BY seq DESC LIMIT ?"
         params.append(max(1, limit))
         rows = self._db.connect().execute(sql, params).fetchall()
@@ -1555,7 +1659,21 @@ class RunEventRepo:
         """删掉旧记录。事件本身没有取证价值，留着只会让库越来越大。"""
         with self._db.write() as conn:
             cursor = conn.execute("DELETE FROM run_event WHERE at < ?", (stamp(before),))
+            # 忽略记录跟着被忽略的那条一起走，否则表会无限长。
+            conn.execute("DELETE FROM event_dismissal WHERE seq NOT IN (SELECT seq FROM run_event)")
         return cursor.rowcount
+
+    def dismiss(self, *, seq: int, topic: str = "", note: str = "", at: datetime) -> None:
+        """把一条异常标成"知道了，不用再提醒"。
+
+        忽略是**结论**，不是隐藏：写进 event_dismissal 之后，同一个问题再出现会是
+        新的一条 seq，仍然会被看见 —— 这条只压住这一次。
+        """
+        with self._db.write() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO event_dismissal(seq,topic,note,at) VALUES(?,?,?,?)",
+                (seq, topic, note[:200], stamp(at)),
+            )
 
 
 class SettingRepo:

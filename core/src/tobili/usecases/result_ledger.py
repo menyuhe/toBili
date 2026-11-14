@@ -3,13 +3,25 @@
 import json
 
 
+def _link_bucket(row) -> str:
+    """「本人转发」这一列的状态，按人眼里的分类归。
+
+    缺 UP 信息的行永远扫不到转发，`link_state` 会一直停在 unscanned ——
+    但在人眼里那不是"还没扫"，是"这条核验不了，得先移除"。混进「未扫描」
+    会让那个数字永远不减，也让侧栏的红点数字在页面上找不到对应项。
+    """
+    if row["check_error"] == "缺少 UP 信息":
+        return "blocked"
+    return row["link_state"]
+
+
 def ledger(box, owner, *, query="", outcome="", link="", offset=0, limit=50):
     db = box.db.connect()
     rows = [
         dict(r)
         for r in db.execute(
             """
-        SELECT c.id campaign_id,c.dyn_id,c.title,c.reward,c.up_name,c.deadline_at,e.stage,
+        SELECT c.id campaign_id,c.dyn_id,c.title,c.reward,c.up_name,c.up_uid,c.deadline_at,e.stage,
         COALESCE(r.share_id,'') share_id,COALESCE(r.link_state,'unscanned') link_state,
         COALESCE(r.choices,'{}') choices,r.followed_before,r.follow_added,
         COALESCE(v.evidence,'') evidence,COALESCE(v.source,'') result_source,
@@ -36,8 +48,8 @@ def ledger(box, owner, *, query="", outcome="", link="", offset=0, limit=50):
         for key in ("pending", "unknown", "won", "lost", "void")
     }
     links = {
-        key: sum(r["link_state"] == key for r in rows)
-        for key in ("verified", "candidate", "conflict", "missing", "unscanned")
+        key: sum(_link_bucket(r) == key for r in rows)
+        for key in ("verified", "candidate", "conflict", "blocked", "missing", "unscanned")
     }
     counts = dict(
         db.execute(
@@ -50,7 +62,7 @@ def ledger(box, owner, *, query="", outcome="", link="", offset=0, limit=50):
         r
         for r in rows
         if (not outcome or r["outcome"] == outcome)
-        and (not link or r["link_state"] == link)
+        and (not link or _link_bucket(r) == link)
         and (
             not query
             or query.lower()

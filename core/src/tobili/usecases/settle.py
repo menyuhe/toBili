@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from ..domain.enrollment import Stage
 from ..domain.errors import Fault, MissingCredential, RemoteError
@@ -143,7 +143,10 @@ class Settle:
                 else:
                     if not up_uid:
                         problems.append(f"{row.get('dyn_id')}：缺少 UP 信息")
-                        self._record_check(account_id, row, now, dry_run, error="缺少 UP 信息")
+                        # 没有 UP 就永远定位不到公告，再查一百次也是同一句结论。
+                        self._record_check(
+                            account_id, row, now, dry_run, error="缺少 UP 信息", terminal=True
+                        )
                         continue
                     if up_uid not in spaces:
                         spaces[up_uid] = self._gateway.scan(
@@ -180,7 +183,7 @@ class Settle:
                     and (
                         exc.fault
                         in {Fault.AUTH, Fault.RISK, Fault.RATE_LIMIT, Fault.NETWORK, Fault.TIMEOUT}
-                        or exc.code in {-9999, 412, 429}
+                        or exc.code in {412, 429}
                     )
                 )
                 if shared_failure:
@@ -192,7 +195,14 @@ class Settle:
                     break
                 continue
             checked += 1
-            self._record_check(account_id, row, now, dry_run)
+            # 公告里写着还没到开奖时间（预约类最常见）的时候，别按常规节奏反复问：
+            # 直接排到开奖之后再看，中间这段时间问了也只会得到同一句"名单未发布"。
+            ready_at = None
+            if notice is not None and decision.outcome is Outcome.PENDING:
+                draw_at = notice.get("lottery_time")
+                if isinstance(draw_at, (int, float)) and draw_at > now.timestamp() + 300:
+                    ready_at = datetime.fromtimestamp(draw_at, UTC) + timedelta(minutes=30)
+            self._record_check(account_id, row, now, dry_run, not_before=ready_at)
             if decision.outcome is Outcome.PENDING:
                 if official and not dry_run:
                     self._verdicts.record(
@@ -253,15 +263,16 @@ class Settle:
             problems=tuple(problems),
         )
 
-    def _record_check(self, owner, row, now, dry_run, error=""):
+    def _record_check(self, owner, row, now, dry_run, error="", *, terminal=False, not_before=None):
         record = getattr(self._enrollments, "record_check", None)
         if record and not dry_run:
             record(
                 owner,
                 int(row["campaign_id"]),
                 now=now,
-                retry_at=now + timedelta(minutes=30),
                 error=error,
+                terminal=terminal,
+                not_before=not_before,
             )
 
     def override(

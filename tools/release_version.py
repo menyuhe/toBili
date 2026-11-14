@@ -3,6 +3,7 @@
 import argparse
 import json
 import re
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,6 +16,17 @@ def current(root=ROOT):
 
 def validate_bundle(root=ROOT):
     version = current(root)
+    for name in ("pyproject.toml", "core/pyproject.toml"):
+        path = root / name
+        if (
+            path.exists()
+            and tomllib.loads(path.read_text(encoding="utf-8"))["project"]["version"] != version
+        ):
+            raise ValueError(f"{name} 与程序版本不同，请同步版本元数据")
+    for name in ("ui/package.json", "ui/package-lock.json"):
+        path = root / name
+        if path.exists() and json.loads(path.read_text(encoding="utf-8"))["version"] != version:
+            raise ValueError(f"{name} 与程序版本不同，请同步版本元数据")
     manifest = json.loads((root / "ui/dist/version.json").read_text(encoding="utf-8"))
     if manifest["version"] != version:
         raise ValueError("界面与程序版本不同，请重新构建 UI")
@@ -31,11 +43,13 @@ def windows_resource(path, name, version):
     return path
 
 
-def bump(version, root=ROOT):
+def bump(version, root=ROOT, *, sync=False):
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         raise ValueError("版本格式为 major.minor.patch")
     old = current(root)
-    if tuple(map(int, version.split("."))) <= tuple(map(int, old.split("."))):
+    if (version != old or not sync) and tuple(map(int, version.split("."))) <= tuple(
+        map(int, old.split("."))
+    ):
         raise ValueError("新版本必须大于当前版本")
     p = root / "core/src/tobili/__init__.py"
     p.write_text(
@@ -70,5 +84,11 @@ def bump(version, root=ROOT):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("version", nargs="?")
+    parser.add_argument("--sync", action="store_true", help="将所有发行元数据同步到核心当前版本")
     args = parser.parse_args()
-    bump(args.version) if args.version else print(current())
+    if args.sync:
+        bump(current(), sync=True)
+    elif args.version:
+        bump(args.version)
+    else:
+        print(current())

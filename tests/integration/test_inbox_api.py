@@ -23,6 +23,8 @@ from tobili.usecases.inbox import InboxView
 class FakeInbox:
     def __init__(self) -> None:
         self.seen: set[str] = set()
+        # 数一数真正打了几次网关 —— 缓存有没有生效只能看这个。
+        self.fetches = 0
         self.items = [
             Message(
                 kind="chat",
@@ -43,6 +45,7 @@ class FakeInbox:
         ]
 
     def fetch(self, account_id: int, *, pages: int = 1, limit: int = 60) -> InboxView:
+        self.fetches += 1
         rows = tuple(
             Message(
                 kind=item.kind,
@@ -129,3 +132,36 @@ def test_clear_seen_makes_everything_unread_again(box) -> None:  # type: ignore[
     client.delete("/api/inbox/seen")
     body = client.get("/api/inbox").json()
     assert all(item["unread"] for item in body["items"])
+
+
+def test_inbox_reads_the_gateway_once_within_the_ttl(box) -> None:  # type: ignore[no-untyped-def]
+    """两分钟内反复进这一页，只读一次 B 站。
+
+    读一次收件箱要打三四个接口，而消息本身不会在两分钟里变出一批新的。
+    但「刷新」必须真的去读 —— 手动点了还看到旧数据才是问题。
+    """
+    client, fake = box
+    client.get("/api/inbox")
+    client.get("/api/inbox")
+    assert fake.fetches == 1
+    client.get("/api/inbox?refresh=1")
+    assert fake.fetches == 2
+
+
+def test_marking_seen_does_not_read_again(box) -> None:  # type: ignore[no-untyped-def]
+    """标「已看」是本地动作，不该顺手再拉一遍消息列表。"""
+    client, fake = box
+    client.get("/api/inbox")
+    client.post("/api/inbox/seen", json={"keys": ["chat:1"]})
+    body = client.get("/api/inbox").json()
+    assert fake.fetches == 1
+    assert {item["key"]: item for item in body["items"]}["chat:1"]["unread"] is False
+
+
+def test_clearing_seen_drops_the_cache(box) -> None:  # type: ignore[no-untyped-def]
+    """重置已看必须重新读，否则界面还会显示上一份"未读"状态。"""
+    client, fake = box
+    client.get("/api/inbox")
+    client.delete("/api/inbox/seen")
+    client.get("/api/inbox")
+    assert fake.fetches == 2

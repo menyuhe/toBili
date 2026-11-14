@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 18
 
 # 后加的列。`CREATE TABLE IF NOT EXISTS` 不会改动已存在的表，老库要靠 ALTER 补。
 # (表名, 列名, 声明) —— 全是常量，不拼接外部输入。
@@ -23,10 +23,17 @@ ADDED_COLUMNS = (
     ("campaign", "reward_status", "TEXT NOT NULL DEFAULT 'pending'"),
     ("campaign", "draw_business_id", "TEXT NOT NULL DEFAULT ''"),
     ("campaign", "draw_business_type", "INTEGER NOT NULL DEFAULT 0"),
+    # 官方依据从哪来：'component' 动态自带抽奖组件，'notice' 官方公告确认，
+    # 空串表示只有正文推断。编稿室只收前两种 —— 奖品写错比少写两条代价大。
+    ("campaign", "official_state", "TEXT NOT NULL DEFAULT ''"),
     ("campaign", "draw_state", "TEXT NOT NULL DEFAULT ''"),
     ("campaign", "draw_checked_at", "TEXT NOT NULL DEFAULT ''"),
     ("campaign", "draw_reason", "TEXT NOT NULL DEFAULT ''"),
     ("account", "level", "INTEGER NOT NULL DEFAULT 0"),
+    # 开奖核验的重试账本：没有次数上限的话，一条永远等不到公告的活动会每 30 分钟
+    # 被问一次，几百条叠在一起就是持续的无效请求。
+    ("result_probe", "attempts", "INTEGER NOT NULL DEFAULT 0"),
+    ("result_probe", "exhausted", "INTEGER NOT NULL DEFAULT 0"),
     ("tidy_plan", "note", "TEXT NOT NULL DEFAULT ''"),
     ("tidy_plan", "finished_at", "TEXT"),
     ("tidy_item", "target", "TEXT NOT NULL DEFAULT ''"),
@@ -71,7 +78,17 @@ CREATE TABLE IF NOT EXISTS result_probe (
     attempted_at TEXT NOT NULL,
     retry_at TEXT NOT NULL,
     error TEXT NOT NULL DEFAULT '',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    exhausted INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY(account_id,campaign_id)
+);
+-- 被"忽略"的异常记录。日志是流水，不该长按着一条修不了的东西不放；
+-- 但忽略本身要留痕，否则下次同一个错再冒出来就没人知道是被压掉的。
+CREATE TABLE IF NOT EXISTS event_dismissal (
+    seq INTEGER PRIMARY KEY,
+    topic TEXT NOT NULL DEFAULT '',
+    note TEXT NOT NULL DEFAULT '',
+    at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS result_dismissal (
     account_id INTEGER NOT NULL REFERENCES account(id),
@@ -149,7 +166,8 @@ CREATE TABLE IF NOT EXISTS campaign (
     source_ref    TEXT    NOT NULL DEFAULT '',
     raw_ref       TEXT    NOT NULL DEFAULT '',
     first_seen_at TEXT    NOT NULL,
-    updated_at    TEXT    NOT NULL
+    updated_at    TEXT    NOT NULL,
+    official_state TEXT   NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS ix_campaign_deadline ON campaign(deadline_at);
 CREATE INDEX IF NOT EXISTS ix_campaign_up ON campaign(up_uid);

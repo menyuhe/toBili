@@ -39,7 +39,9 @@ def test_unrelated_message_needs_no_campaign_is_account_scoped_and_content_scope
     assert result["counts"]["prize"] == 0
     assert inbox.fetch(b).counts["prize"] == 1
     message = replace(message, text="新的活动恭喜你中奖了，请提供地址")
-    assert client.get("/api/inbox").json()["counts"]["prize"] == 1
+    # 收件箱有 2 分钟缓存，这里要看的是"同一条私信换了内容就不再算已核对"，
+    # 所以得强制回源，否则读到的是上一份结果。
+    assert client.get("/api/inbox?refresh=1").json()["counts"]["prize"] == 1
     box.repos.accounts.mark_current(b)
     assert client.post("/api/inbox/review", json=body).status_code == 409
     assert (

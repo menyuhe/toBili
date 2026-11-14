@@ -261,6 +261,11 @@ class DynamicReader:
             if codes.code_of(payload) != -9999 or attempt:
                 break
             time.sleep(1)
+        # -9999「服务系统错误」是 B 站对"这个 business_id 没有抽奖公告"的固定回答，
+        # 不是故障：同一条反复问都是这个码，而真有公告的活动一次就能返回。按"没有"
+        # 处理，才能把「没登记」和「没查成」分开 —— 前者是结论，后者不是。
+        if codes.code_of(payload) == -9999:
+            return None
         codes.ensure_ok(payload, what="读取官方开奖结果")
         notice = payload.get("data")
         if not isinstance(notice, dict) or not notice.get("lottery_id"):

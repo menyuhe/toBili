@@ -139,6 +139,8 @@ def test_automatic_feeds_stagger_and_continuation_does_not_accelerate(
     first = repos.feeds.add(account_id, "topic", "1", "A")
     second = repos.feeds.add(account_id, "topic", "2", "B")
     repos.settings.put(account_id, "sources.refresh", "1")
+    # 这里测的是"错峰 + 续扫不加速"，间隔取基准值即可，不叠加话题降频。
+    repos.settings.put(account_id, "sources.topic.interval_hours", "0")
     repos.feeds.save_cursor(first, 'v2:{"latest":"next"}', now=clock.now())
     now, calls = [1800000000.0], []
     monkeypatch.setattr("tobili.runtime.source_refresh.time.time", lambda: now[0])
@@ -162,3 +164,27 @@ def test_automatic_feeds_stagger_and_continuation_does_not_accelerate(
     assert [c["feed_id"] for c in calls] == [first, second]
     assert all(c["per_feed"] == 5 for c in calls)
     assert float(repos.settings.get(account_id, f"sources.due.{first}")) == 1800003600.0
+
+
+def test_topic_interval_lengthens_topic_refresh(repos, clock, account_id, monkeypatch):
+    """话题源按 sources.topic.interval_hours 排期，不必和索引源抢同一个轮转额度。"""
+    feed = repos.feeds.add(account_id, "topic", "9", "话题")
+    repos.settings.put(account_id, "sources.refresh", "1")
+    repos.settings.put(account_id, "sources.topic.interval_hours", "3")
+    now = [1800000000.0]
+    monkeypatch.setattr("tobili.runtime.source_refresh.time.time", lambda: now[0])
+    calls = []
+    box = SimpleNamespace(
+        repos=repos,
+        clock=clock,
+        has_session=lambda o: True,
+        lanes=SimpleNamespace(exclusive=lambda o: nullcontext()),
+        scan_feeds=lambda o: SimpleNamespace(
+            run=lambda *a, **kw: calls.append(kw) or SimpleNamespace(problems=[])
+        ),
+    )
+    worker = SourceRefresh.__new__(SourceRefresh)
+    worker.box, worker.stop = box, threading.Event()
+    worker.tick()
+    assert len(calls) == 1
+    assert float(repos.settings.get(account_id, f"sources.due.{feed}")) == now[0] + 3 * 3600

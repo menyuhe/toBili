@@ -491,7 +491,7 @@ class TaskBook:
                         )
                 elif key == "results":
                     r = box.settle(owner).run(
-                        owner, profile=box.repos.accounts.by_id(owner), limit=20, dry_run=False
+                        owner, profile=box.repos.accounts.by_id(owner), limit=30, dry_run=False
                     )
                     result.update(
                         ok=r.ok,
@@ -551,7 +551,13 @@ class TaskBook:
             history = json.loads(box.repos.settings.get(owner, history_key, "[]"))
             box.repos.settings.put(owner, history_key, json.dumps([result, *history][:20]))
         box.bus.publish(
-            "schedule.round", {"account_id": owner, "title": f"{TASKS[key][0]} · {result['note']}"}
+            "schedule.round",
+            {
+                "account_id": owner,
+                # task 决定这条记录进哪一栏。只靠标题前缀认太脆，分类逻辑一改就全错。
+                "task": key,
+                "title": f"{TASKS[key][0]} · {result['note']}",
+            },
         )
         return result
 

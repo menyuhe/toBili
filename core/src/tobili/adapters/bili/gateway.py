@@ -90,6 +90,15 @@ class BiliGateway:
     def lottery_notice(self, business_id: str, business_type: int = 1) -> dict | None:
         return self._reader.lottery_notice(business_id, business_type)
 
+    def index_draw(self, dyn_id: str):
+        """按动态 ID 查官方抽奖索引，不管这条动态有没有渲染出抽奖组件。
+
+        发现阶段用它做准入判定：查得到就是官方活动，查不到就是不进候选的线索。
+        """
+        from .official_draw import probe_notice
+
+        return probe_notice(self._transport, dyn_id)
+
     def unread(self) -> MessageStat:
         return self._reader.unread()
 

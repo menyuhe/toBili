@@ -10,8 +10,9 @@
  */
 import { onMounted, ref } from 'vue'
 
-import { api, type NotifyState, type Settings } from '../api'
+import { api, req, type NotifyState, type Settings } from '../api'
 import SettingCard from '../components/SettingCard.vue'
+import BlockList from '../components/BlockList.vue'
 import ParticipationPace from '../components/ParticipationPace.vue'
 import { setSound, state, toast } from '../store'
 import { play } from '../sound'
@@ -22,6 +23,8 @@ const openLlm = ref(false)
 const openNotify = ref(false)
 const openSound = ref(false)
 const openPace = ref(false)
+const openBlocks = ref(false)
+const blockCount = ref(0)
 
 /** 三条路按可靠性排序：模板最稳，评论区次之，模型最飘。任何一条失败都往下退，
  *  所以这页的重点不是"选哪个"，而是"兜底那句一定要能发出去"。 */
@@ -69,6 +72,7 @@ async function load() {
   loading.value = true
   try {
     const [saved, n] = await Promise.all([api.settings(), api.notifyState()])
+    blockCount.value = (await req<{ items: unknown[] }>('/api/blocks').catch(() => ({ items: [] }))).items.length
     settings.value = saved
     applyText(saved)
     notify.value = n
@@ -382,6 +386,14 @@ onMounted(load)
         </div>
       </SettingCard>
 
+      <!-- UP 黑名单：从「管理设置」那一组挪进来，和通知、提示音同级 -->
+      <SettingCard v-model:shown="openBlocks" title="UP 黑名单">
+        <template #right>
+          <span class="chip" :class="blockCount ? 'chip-warn' : ''">{{ blockCount }} 个</span>
+        </template>
+        <BlockList @count="blockCount = $event" />
+      </SettingCard>
+
       <!-- 提示音 -->
       <SettingCard v-model:shown="openSound" title="提示音">
         <template #right>
@@ -406,32 +418,6 @@ onMounted(load)
 
 <style scoped>
 .settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px;max-width:1100px;margin:auto}.settings-grid>.panel:only-child{grid-column:1/-1}@media(max-width:700px){.settings-grid{grid-template-columns:1fr}}
-.btn {
-  display: inline-flex;
-  align-items: center;
-  height: 30px;
-  padding: 0 13px;
-  border-radius:var(--radius-control);
-  border: 1px solid var(--line);
-  background: var(--surface-3);
-  color: var(--text);
-  font-size:var(--text-meta);
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.14s ease;
-}
-.btn:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-.btn:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-.btn.danger:hover {
-  border-color: var(--danger);
-  color: var(--danger);
-}
 .lbl {
   display: block;
   font-size: 12px;
@@ -446,7 +432,7 @@ onMounted(load)
   border: 1px solid var(--line);
   background: var(--surface-2);
   color: var(--text);
-  font-size: 13.5px;
+  font-size:var(--text-control);
   line-height: 1.65;
   outline: none;
   resize: vertical;

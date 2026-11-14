@@ -171,6 +171,12 @@ def _mount_ui(app: FastAPI, dist: Path) -> None:
     if assets.is_dir():
         app.mount("/assets", StaticFiles(directory=assets), name="assets")
 
+    # index.html 必须每次回源。内嵌窗口是 WebView2，它会给"没有缓存头"的响应
+    # 按 Last-Modified 算一个启发式新鲜期，于是换了程序、窗口里还是上一版的
+    # 页面（连 asset 文件名都指向旧包，界面上一直停在旧版本号）。真实症状：
+    # 浏览器 Ctrl+F5 是新的，桌面窗口怎么重开都是旧的。带哈希的 assets 不受影响。
+    fresh: dict[str, str] = {"Cache-Control": "no-store, must-revalidate"}
+
     @app.get("/{path:path}", include_in_schema=False)
     def spa(path: str) -> FileResponse:
         # 兜底路由**不能吃 /api**。吃掉的后果不是 404，而是 200 + 一整页 HTML：
@@ -182,8 +188,8 @@ def _mount_ui(app: FastAPI, dist: Path) -> None:
         # 让前端路由接住 —— 否则刷新 /tidy 会 404。
         candidate = (dist / path).resolve()
         if path and candidate.is_file() and candidate.is_relative_to(dist.resolve()):
-            return FileResponse(candidate)
-        return FileResponse(index)
+            return FileResponse(candidate, headers=fresh)
+        return FileResponse(index, headers=fresh)
 
 
 app = create_app()

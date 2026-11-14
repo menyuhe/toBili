@@ -32,6 +32,7 @@ def list_campaigns(
     order: str = "newest",
     prize_state: str = "",
     availability: str = "",
+    official: str = Query(default="", description="yes 官方池 / no 线索池"),
     box: Container = Depends(get_container),
 ) -> dict[str, object]:
     account = box.account()
@@ -60,6 +61,7 @@ def list_campaigns(
         order=order,
         prize_state=prize_state,
         availability=availability,
+        official=official,
     )
     items = []
     for row in body["items"]:  # type: ignore[union-attr]
@@ -69,7 +71,7 @@ def list_campaigns(
             item[key] = _iso(item.get(key))
         item["confidence"] = round(float(item.get("confidence") or 0), 2)
         items.append(item)
-    return {"items": items, "total": body["total"]}
+    return {"items": items, "total": body["total"], "counts": body.get("counts", {})}
 
 
 def _iso(value: object) -> str | None:

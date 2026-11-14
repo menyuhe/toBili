@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -12,9 +12,7 @@ from tobili.runtime.journal import Outcome
 def setup(ledger_box, monkeypatch, error="缺少 UP 信息", ref=None):
     client, box, a, b, cid = ledger_box
     now = datetime.now(UTC)
-    box.repos.enrollments.record_check(
-        a, cid, now=now, retry_at=now - timedelta(seconds=1), error=error
-    )
+    box.repos.enrollments.record_check(a, cid, now=now, error=error)
     calls = []
     gateway = SimpleNamespace(find_share=lambda *a, **k: ref, did=lambda *a, **k: ProbeState.ABSENT)
     monkeypatch.setattr(box, "check_writer", lambda owner: None)

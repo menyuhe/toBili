@@ -117,7 +117,7 @@ function clock(at: number) {
         <p class="text-[12.5px] muted leading-relaxed mb-3">
           退出登录会删掉本机保存的 cookie。下次要用得重新扫码。
         </p>
-        <button class="btn" :disabled="signingOut" @click="signOut">退出登录</button>
+        <button class="btn danger" :disabled="signingOut" @click="signOut">退出登录</button>
       </section>
     </aside>
   </div>
@@ -125,22 +125,4 @@ function clock(at: number) {
 
 <style scoped>
 .event-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.8}.event-issue{color:var(--warn)}button[aria-pressed=true]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
-.btn {
-  height: 31px;
-  padding: 0 13px;
-  border-radius:var(--radius-control);
-  border: 1px solid var(--line);
-  background: var(--surface-3);
-  color: var(--text);
-  font-size:var(--text-meta);
-  cursor: pointer;
-  transition: all 0.14s ease;
-}
-.btn:hover:not(:disabled) {
-  border-color: var(--danger);
-  color: var(--danger);
-}
-.btn:disabled {
-  opacity: 0.5;
-}
 </style>

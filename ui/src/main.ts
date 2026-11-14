@@ -22,8 +22,8 @@ import './styles.css'
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [
-    {path:'/standby',component:Standby,meta:{title:'挂机中心'}},
-    { path: '/', name: 'overview', component: Overview, meta: { title: '概览' } },
+    {path:'/standby',component:Standby,meta:{title:'挂机运作'}},
+    { path: '/', name: 'overview', component: Overview, meta: { title: '运营中心' } },
     { path: '/inbox', name: 'inbox', component: Inbox, meta: { title: '消息' } },
     { path: '/campaigns', name: 'campaigns', component: Campaigns, meta: { title: '活动奖品' } },
     { path: '/shelf', component: Campaigns, meta:{title:'往期架'} },

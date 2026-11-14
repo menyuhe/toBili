@@ -4,6 +4,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { req, api, type Candidate, type Feed, type ScanReport } from '../api'
 import { refreshAll, state, toast } from '../store'
 import Modal from '../components/Modal.vue'
+import Icon from '../components/Icon.vue'
 
 const directoryOpen=ref(false),directoryBusy=ref(false),directoryResult=ref<{read:number;added:number;updated:number;skipped:number;more:boolean}>()
 async function readDirectory(restart=false){directoryBusy.value=true;try{directoryResult.value=await req('/api/public-catalog/read',{method:'POST',body:JSON.stringify({restart})});toast(`已加入 ${directoryResult.value!.added} 条活动奖品`,'ok')}catch(e){toast(String(e),'danger')}finally{directoryBusy.value=false}}
@@ -28,8 +29,21 @@ const problems = ref<string[]>([])
 
 const active = computed(() => feeds.value.filter((feed) => feed.enabled))
 const idle = computed(() => feeds.value.filter((feed) => !feed.enabled))
-const filter=ref('topic'),search=ref('')
+const filter=ref(''),search=ref('')
+/* 搜索与自动更新原来在列表上方各占一行：一个输入框、一个折叠面板。
+   两样都是"设一次就很少动"的东西，收成图标按钮更值。 */
+const searchOpen=ref(false),searchInput=ref<HTMLInputElement|null>(null),refreshOpen=ref(false)
+function toggleSearch(){searchOpen.value=!searchOpen.value;if(searchOpen.value)requestAnimationFrame(()=>searchInput.value?.focus())}
+function closeSearch(){searchOpen.value=false;if(search.value){search.value='';}}
 const visible=computed(()=>feeds.value.filter(f=>(!filter.value||f.kind===filter.value)&&(!search.value||`${f.label} ${f.target}`.toLowerCase().includes(search.value.trim().toLowerCase()))))
+/** 四张卡就是四种来源。点一下只看这一类，再点一下回到全部。 */
+const METRICS=computed(()=>[
+ {key:'',label:'全部订阅',count:feeds.value.length,hint:`${active.value.length} 启用 · ${idle.value.length} 停用`,tone:'metric-tone-discover'},
+ {key:'topic',label:'话题',count:feeds.value.filter(f=>f.kind==='topic').length,hint:'按话题 ID 抓新动态',tone:'metric-tone-accent'},
+ {key:'collection',label:'UP 合集',count:feeds.value.filter(f=>f.kind==='collection').length,hint:'按合集追更',tone:'metric-tone-editor'},
+ {key:'space',label:'UP 动态',count:feeds.value.filter(f=>f.kind==='space').length,hint:'盯住指定 UP',tone:'metric-tone-warn'},
+])
+function pick(key:string){filter.value=filter.value===key?'':key}
 
 async function load(quiet=false) {
   if(!quiet) loading.value = true
@@ -169,39 +183,62 @@ onUnmounted(()=>{if(poll)clearInterval(poll)})
 </script>
 
 <template>
-  <div class="sources-layout">
-    <section class="panel source-list">
-      <div class="panel-head">
-        <span class="dim text-sm">{{ active.length }} 个启用 · {{ idle.length }} 个停用 <span class="chip">话题 / 合集 · 所有账号共用</span></span>
-        <div class="toolbar"><button @click="directoryOpen=true">公开目录</button><button class="primary" @click="addDialog?.showModal()">添加订阅</button><button :disabled="!!busy || !visible.some(f=>f.enabled)" @click="scan(false)">{{ busy === 'scan' ? '扫描中…' : '更新当前列表' }}</button><button :disabled="!!busy || !visible.some(f=>f.enabled)" @click="scan(true)">续扫当前列表</button></div>
+  <div class="sources-workspace">
+    <section class="panel page-heading">
+      <div><h2>订阅源</h2><span class="heading-sub">{{ active.length }} 个启用 · {{ idle.length }} 个停用 · 话题与合集所有账号共用<template v-if="filter||search"> · 筛到 {{ visible.length }} 个</template></span></div>
+      <div class="toolbar">
+        <button class="tool-icon" :class="{on:searchOpen||!!search}" title="搜索名称或 ID" aria-label="搜索订阅源" @click="toggleSearch"><Icon name="search" :size="16"/></button>
+        <button class="auto-refresh" :class="{on:refreshEnabled}" @click="refreshOpen=true"><Icon name="refresh" :size="16"/>自动更新<span v-if="refreshEnabled"> · {{refreshMinutes}} 分钟</span></button>
+        <button @click="directoryOpen=true"><Icon name="cloud" :size="16"/>公开目录</button>
+        <button @click="addDialog?.showModal()"><Icon name="plus" :size="16"/>添加订阅</button>
+        <button :disabled="!!busy || !visible.some(f=>f.enabled)" @click="scan(false)">{{ busy === 'scan' ? '扫描中…' : '更新当前列表' }}</button>
+        <button class="primary" :disabled="!!busy || !visible.some(f=>f.enabled)" @click="scan(true)">续扫当前列表</button>
       </div>
-      <details class="refresh-settings"><summary>自动更新 · {{refreshEnabled?'已开启，每 '+refreshMinutes+' 分钟':'未开启'}}</summary><div class="toolbar mt-3"><label><input type="checkbox" v-model="refreshEnabled" /> 自动读取来源</label><label>间隔 <select v-model.number="refreshMinutes" aria-label="来源更新间隔"><option :value="30">30 分钟</option><option :value="60">1 小时</option><option :value="180">3 小时</option><option :value="360">6 小时</option><option :value="1440">1 天</option></select></label><button :disabled="refreshBusy" @click="saveRefresh">保存</button><span class="muted text-xs">仅更新资料，不参与活动。</span></div></details>
-      <div class="source-filter toolbar"><div class="type-tabs" aria-label="订阅类型"><button :class="{'selected':filter==='topic'}" :aria-pressed="filter==='topic'" @click="filter='topic'">话题 <span>{{feeds.filter(f=>f.kind==='topic').length}}</span></button><button class="collection-tab" :class="{'selected':filter==='collection'}" :aria-pressed="filter==='collection'" @click="filter='collection'">UP 合集 <span>{{feeds.filter(f=>f.kind==='collection').length}}</span></button></div><input class="ipt min-w-0 flex-1" v-model="search" aria-label="搜索订阅源" placeholder="名称或 ID" /><button class="plain-filter" :aria-pressed="filter===''" @click="filter=''">全部</button></div>
-      <div v-if="loading" class="empty-state">读取中…</div>
-      <div v-else-if="!feeds.length" class="empty-state">添加话题或 UP，开始发现活动。</div>
-      <div v-if="!loading && feeds.length && !visible.length" class="empty-state">没有匹配的订阅源</div>
-      <div v-for="feed in visible" :key="feed.id" class="source-row row-hover" :class="'source-row-'+feed.kind">
-        <div class="source-main">
-          <span class="chip" :class="'source-type-'+feed.kind">{{ labels[feed.kind] || feed.kind }}</span>
-          <div class="min-w-0">
-            <input v-if="editing === feed.id" v-model="draft" aria-label="订阅源名称" class="ipt" maxlength="40" @keyup.enter="saveRename(feed)" @keyup.esc="editing=0" @blur="saveRename(feed)" v-focus />
-            <strong v-else class="block truncate">{{ feed.label }}</strong>
-            <div class="muted text-xs mt-1">{{feed.target}} · {{ feed.last_scan_at ? new Date(feed.last_scan_at).toLocaleString('zh-CN') : '未扫描' }} <span v-if="!feed.enabled"> · 已停用</span></div>
-            <p v-if="feed.error" class="source-error" role="status">{{feed.error}}</p>
-          </div>
-        </div>
-        <div class="toolbar source-ops">
-          <button :disabled="!!busy" @click="scan(false,feed.id)">更新</button>
-          <button :disabled="!!busy" @click="scan(true,feed.id)">续扫</button>
-          <details class="source-menu"><summary>管理</summary><div class="toolbar"><button @click="startRename(feed)">改名</button>
-          <button @click="toggle(feed)">{{ feed.enabled ? '停用' : '启用' }}</button>
-          <button class="danger" @click="destroy(feed)">删除</button></div></details>
-        </div>
-      </div>
-      <div v-if="report" class="scan-result" role="status">扫描 {{ report.scanned }} 条 · 命中 {{ report.matched }} 条 · {{ report.unique }} 个活动
-        <p v-if="report.problems.length" class="warning mt-2">{{ report.problems.join('；') }}</p>
-      </div>
+      <div v-if="searchOpen" class="search-strip"><input ref="searchInput" v-model="search" class="ipt" placeholder="名称或 ID" aria-label="搜索订阅源" @keyup.esc="closeSearch"/><button class="mini" @click="closeSearch">清空并收起</button></div>
     </section>
+
+    <div class="metric-row">
+      <button v-for="card in METRICS" :key="card.key" class="panel metric-card" :class="[card.tone,{selected:filter===card.key}]" @click="pick(card.key)">
+        <span>{{card.label}}</span><strong>{{card.count}}</strong><small>{{card.hint}}</small>
+      </button>
+    </div>
+
+    <section class="panel list-panel">
+      <div class="list-scroll">
+        <table class="dense source-table">
+          <thead><tr><th class="kind-col">类型</th><th class="cell-align-start">名称</th><th class="cell-align-start target-col">目标</th><th class="scan-col">最近扫描</th><th class="state-col">状态</th><th class="action-col">操作</th></tr></thead>
+          <tbody>
+            <tr v-for="feed in visible" :key="feed.id">
+              <td><span class="chip" :class="'source-type-'+feed.kind">{{ labels[feed.kind] || feed.kind }}</span></td>
+              <td class="cell-align-start name-cell">
+                <input v-if="editing === feed.id" v-model="draft" aria-label="订阅源名称" class="ipt" maxlength="40" @keyup.enter="saveRename(feed)" @keyup.esc="editing=0" @blur="saveRename(feed)" v-focus />
+                <strong v-else>{{ feed.label }}</strong>
+                <small v-if="feed.error" class="source-error" role="status">{{feed.error}}</small>
+              </td>
+              <td class="cell-align-start target-col"><span class="kbd">{{feed.target}}</span></td>
+              <td class="scan-col">{{ feed.last_scan_at ? new Date(feed.last_scan_at).toLocaleString('zh-CN') : '未扫描' }}</td>
+              <td><span class="chip" :class="feed.enabled?'chip-ok':''">{{ feed.enabled ? '启用' : '已停用' }}</span></td>
+              <td><div class="row-controls">
+                <button class="mini" :disabled="!!busy" @click="scan(false,feed.id)">更新</button>
+                <button class="mini" :disabled="!!busy" @click="scan(true,feed.id)">续扫</button>
+                <details class="source-menu"><summary>管理</summary><div class="toolbar"><button class="mini" @click="startRename(feed)">改名</button><button class="mini" @click="toggle(feed)">{{ feed.enabled ? '停用' : '启用' }}</button><button class="mini danger" @click="destroy(feed)">删除</button></div></details>
+              </div></td>
+            </tr>
+            <tr v-if="loading"><td colspan="6" class="empty-state">读取中…</td></tr>
+            <tr v-else-if="!feeds.length"><td colspan="6" class="empty-state">添加话题或 UP，开始发现活动。</td></tr>
+            <tr v-else-if="!visible.length"><td colspan="6" class="empty-state">没有匹配的订阅源</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <footer v-if="report" class="list-footer scan-result" role="status">扫描 {{ report.scanned }} 条 · 命中 {{ report.matched }} 条 · {{ report.unique }} 个活动
+        <span v-if="report.problems.length" class="warning">{{ report.problems.join('；') }}</span>
+      </footer>
+    </section>
+
+    <Modal v-if="refreshOpen" title="自动更新订阅源" @close="refreshOpen=false"><div class="filter-grid">
+      <div class="filter-group"><h3>开关</h3><div class="compact-options"><label><input type="checkbox" v-model="refreshEnabled"/>定时读取已启用的来源</label></div></div>
+      <div class="filter-group"><h3>间隔</h3><div class="compact-options"><select class="ipt" v-model.number="refreshMinutes" aria-label="来源更新间隔" style="width:160px"><option :value="30">30 分钟</option><option :value="60">1 小时</option><option :value="180">3 小时</option><option :value="360">6 小时</option><option :value="1440">1 天</option></select></div></div>
+    </div><p class="muted text-[12px]">只更新来源资料和活动线索，不会替你参与任何活动。</p><div class="modal-actions"><button @click="refreshOpen=false">取消</button><button class="primary" :disabled="refreshBusy" @click="saveRefresh();refreshOpen=false">{{refreshBusy?'保存中…':'保存'}}</button></div></Modal>
     <Modal v-if="directoryOpen" title="公开活动目录" :can-close="()=>!directoryBusy" @close="directoryOpen=false"><div class="space-y-4">
       <p class="muted">只读导入奖品资料，不上传账号或参与记录。</p>
       <p v-if="directoryResult" role="status">读取 {{directoryResult.read}} 条 · 新增 {{directoryResult.added}} 条 · 修正 {{directoryResult.updated||0}} 条 · 跳过已有、过期或屏蔽项 {{directoryResult.skipped}} 条</p>
@@ -212,36 +249,47 @@ onUnmounted(()=>{if(poll)clearInterval(poll)})
       <section class="space-y-4">
         <label class="field">类型<select class="ipt" v-model="kind"><option value="topic">话题</option><option value="collection">UP 合集</option><option value="space">UP 动态</option><option value="following">关注流</option></select></label>
         <label v-if="kind !== 'following'" class="field">{{kind==='topic'?'话题 ID / 链接':'UP UID / 空间链接'}}<input class="ipt" v-model="target" @keyup.enter="add" :placeholder="kind==='topic'?'https://www.bilibili.com/v/topic/detail?topic_id=…':'https://space.bilibili.com/…'" /></label>
-        
         <label class="field">备注<input class="ipt" v-model="label" placeholder="可选" maxlength="40" @keyup.enter="add" /></label>
         <button class="primary w-full" :disabled="!!busy" @click="add">{{busy==='add'?'添加中…':'添加'}}</button>
       </section>
       <details><summary>查找 UP</summary><div class="space-y-3 mt-3">
         <label class="field">昵称或关键词<input class="ipt" v-model="keyword" @keyup.enter="discover" /></label>
         <button :disabled="!!busy" @click="discover">查找</button>
-        <div v-for="candidate in candidates" :key="candidate.uid" class="flex items-center gap-2"><div class="min-w-0 flex-1"><strong>{{candidate.name}}</strong><p class="muted text-xs">{{candidate.fans.toLocaleString()}} 粉丝</p></div><button @click="subscribe(candidate)">订阅动态</button></div>
+        <div v-for="candidate in candidates" :key="candidate.uid" class="flex items-center gap-2"><div class="min-w-0 flex-1"><strong>{{candidate.name}}</strong><p class="muted text-xs">{{candidate.fans.toLocaleString()}} 粉丝</p></div><button class="mini" @click="subscribe(candidate)">订阅动态</button></div>
         <p v-if="problems.length" class="warning">{{ problems.join('；') }}</p>
       </div></details>
     </div></dialog>
   </div>
 </template>
 <style scoped>
-.sources-layout{display:block}
-.refresh-settings{padding:12px 18px;border-bottom:1px solid var(--line-soft)}
-.source-main{display:flex;align-items:center;gap:14px;min-width:0;flex:1}
-.source-row{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:16px 18px;border-bottom:1px solid var(--line-soft)}
-.source-ops{flex:none;gap:6px}
-.source-ops button{font-size:var(--text-meta)}
-.source-filter{padding:12px 18px;border-bottom:1px solid var(--line-soft)}
-.source-filter select{width:130px}
+.sources-workspace{max-width:1440px;margin:auto;display:flex;flex-direction:column;gap:18px;height:100%;min-height:520px}
+.sources-workspace>.list-panel{flex:1;min-height:0}
+/* 自动更新开着时按钮只换描边色：它是状态提示，不是这页的主操作，
+   做成实心主按钮会跟右边的「续扫当前列表」抢眼睛。 */
+.auto-refresh.on{border-color:var(--accent);color:var(--accent)}
+.search{width:260px;flex:none}
+.refresh-settings{border-top:1px solid var(--line-soft);padding-top:10px}
+.refresh-settings summary{font-size:var(--text-meta);color:var(--muted)}
+.refresh-settings>div{margin-top:10px;gap:14px;font-size:var(--text-meta)}
+.refresh-settings select{width:120px}
+.refresh-check{display:inline-flex;align-items:center;gap:7px;cursor:pointer}
+.source-table{width:100%;min-width:1040px;table-layout:fixed}
+.source-table td,.source-table th{text-align:center;vertical-align:middle;white-space:normal}
+.source-table tbody td{border-bottom:1px solid var(--line-soft)}
+.source-table tbody tr:last-child td{border-bottom:0}
+.source-table tbody tr:hover{background:var(--surface-2)}
+.kind-col{width:104px}.name-cell{min-width:220px;padding-inline:16px!important}
+.name-cell strong{font-size:var(--text-body);font-weight:600}
+.target-col{width:260px}.target-col .kbd{overflow-wrap:anywhere;white-space:normal}
+.scan-col{width:170px;font-size:var(--text-meta);color:var(--muted)}
+.state-col{width:92px}.action-col{width:250px}
+.source-error{display:block;margin-top:6px;font-size:var(--text-small);line-height:1.5;color:var(--warn)}
 .source-menu{position:relative}
-.source-menu summary{padding:6px 9px;color:var(--muted)}
-.source-menu>div{position:absolute;right:0;top:35px;padding:12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-control);box-shadow:var(--shadow);z-index:3;width:220px}
-.source-error{font-size:var(--text-meta);line-height:1.5;color:var(--warn);margin-top:6px;max-width:650px}
-.scan-result{padding:16px 18px;font-size:var(--text-control)}
+.source-menu summary{padding:0 8px;height:30px;display:inline-flex;align-items:center;color:var(--muted);font-size:var(--text-meta);border:1px solid var(--line);border-radius:var(--radius-control)}
+.source-menu>div{position:absolute;right:0;top:36px;padding:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-control);box-shadow:var(--shadow);z-index:3}
+.scan-result{gap:12px;justify-content:flex-start;flex-wrap:wrap}
 .source-type-topic{color:var(--discover);background:color-mix(in srgb,var(--discover) 10%,transparent)}
 .source-type-collection{color:var(--editor);background:color-mix(in srgb,var(--editor) 10%,transparent)}
-.source-type-space{color:var(--accent)}
-.source-type-following{color:var(--warn)}
-@media(max-width:800px){.source-row{flex-wrap:wrap}.source-main{flex-basis:100%}.panel-head{flex-wrap:wrap}}
+.source-type-space{color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.source-type-following{color:var(--warn);background:color-mix(in srgb,var(--warn) 10%,transparent)}
 </style>

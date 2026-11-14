@@ -5,6 +5,8 @@ import { registerWorkGuard } from '../workGuard'
 
 import { api, type ExecReport, type Plan, type PlanLine, type PlanSummary } from '../api'
 import { refreshGuard, state, toast } from '../store'
+import Modal from '../components/Modal.vue'
+import Icon from '../components/Icon.vue'
 
 const plan = ref<Plan | null>(null)
 const summary = ref<PlanSummary[]>([])
@@ -212,96 +214,70 @@ onMounted(async () => {
   if (latest) await open(latest.id)
 })
 </script>
-
 <template>
-  <div class="max-w-[1180px] space-y-4">
-    <!-- 状态条：四步是硬的，这里只负责让人看清走到哪儿了 -->
-    <section class="panel px-5 py-4">
-      <div class="flex items-center justify-between gap-6 flex-wrap">
-        <div class="flex items-center gap-1">
+  <div class="tidy-workspace">
+    <!-- 标题 + 主操作 -->
+    <section class="panel page-heading">
+      <div>
+        <h2>清理</h2>
+        <span class="heading-sub">
+          <template v-if="plan">计划 #{{ plan.plan_id }} · {{ PLAN_LABEL[plan.state] ?? plan.state }} · {{ items.length }} 条</template>
+          <template v-else>只删已判定没中奖的转发；每条都可以单独取消勾选</template>
+        </span>
+      </div>
+      <div class="toolbar">
+        <span v-if="plan && locked && plan.state !== 'done' && plan.state !== 'aborted'" class="chip chip-danger">清单已锁定</span>
+        <button class="primary" :disabled="busy === 'preview'" @click="preview">
+          {{ busy === 'preview' ? '正在核对…' : plan ? '更新清单' : '生成清单' }}
+        </button>
+      </div>
+    </section>
+
+    <!-- 分档数字 -->
+    <div class="metric-row">
+      <div class="panel metric-card metric-tone-accent"><span>可清理</span><strong>{{ items.length }}</strong><small>已判定没中奖的转发</small></div>
+      <div class="panel metric-card metric-tone-ok"><span>已勾选</span><strong>{{ chosen.length }}</strong><small>确认后会锁定这一批</small></div>
+      <div class="panel metric-card metric-tone-discover"><span>已删除</span><strong>{{ items.filter(i => i.state === 'done').length }}</strong><small>转发已经删掉</small></div>
+      <div class="panel metric-card metric-tone-danger"><span>失败</span><strong>{{ items.filter(i => i.state === 'failed').length }}</strong><small>需要重新执行一次</small></div>
+    </div>
+
+    <!-- 空态 -->
+    <section v-if="!plan && !loading" class="panel empty-panel">
+      <Icon name="trash" :size="22" />
+      <div class="text-[15px] font-semibold">还没有清理清单</div>
+      <p class="text-[13px] muted">点「生成清单」，把已判定没中奖、且转发还在的条目列出来。</p>
+      <button class="btn" :disabled="busy === 'preview'" @click="preview">生成清单</button>
+    </section>
+
+    <!-- 清单 -->
+    <section v-if="plan" class="panel list-panel">
+      <div class="panel-head tidy-head">
+        <div class="steps">
           <template v-for="(step, index) in STEPS" :key="step.key">
-            <div class="flex items-center gap-1.5">
+            <div class="step">
               <div class="step-dot" :class="index <= stepIndex ? 'step-on' : ''">
                 <svg v-if="index < stepIndex" width="11" height="11" viewBox="0 0 24 24" fill="none">
                   <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
                 <span v-else>{{ index + 1 }}</span>
               </div>
-              <span class="text-[13px]" :style="{ color: index <= stepIndex ? 'var(--text)' : 'var(--muted)', fontWeight: index === stepIndex ? 600 : 400 }">
-                {{ step.label }}
-              </span>
+              <span class="step-label" :class="{ 'step-label-on': index <= stepIndex, 'step-label-now': index === stepIndex }">{{ step.label }}</span>
             </div>
-            <div v-if="index < STEPS.length - 1" class="w-8 h-px mx-1" :style="{ background: index < stepIndex ? 'var(--accent)' : 'var(--line)' }" />
+            <div v-if="index < STEPS.length - 1" class="step-line" :class="{ 'step-line-on': index < stepIndex }" />
           </template>
         </div>
-
-        <div class="flex items-center gap-2">
-          <span v-if="plan" class="chip" :class="plan.state === 'done' ? 'chip-ok' : plan.state === 'aborted' ? 'chip-warn' : 'chip-accent'">
-            #{{ plan.plan_id }} · {{ PLAN_LABEL[plan.state] ?? plan.state }}
-          </span>
-          <span v-if="plan && locked && plan.state !== 'done' && plan.state !== 'aborted'" class="chip chip-danger">
-            清单已锁定
-          </span>
-          <button class="btn" :disabled="busy === 'preview'" @click="preview">
-            {{ busy === 'preview' ? '正在核对…' : plan ? '更新清单' : '生成清单' }}
-          </button>
-        </div>
-      </div>
-    </section>
-
-    <!-- 空态 -->
-    <section v-if="!plan && !loading" class="panel px-6 py-14 text-center">
-      <div class="w-11 h-11 rounded-xl grid place-items-center mx-auto mb-4" style="background: var(--accent-soft); color: var(--accent)">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-          <path d="M4 7h16M9 7V5h6v2m-8 0 1 13h8l1-13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </div>
-      <div class="text-[15px] font-semibold">还没有清理清单</div>
-      <p class="text-[13px] muted mt-2 leading-relaxed max-w-[440px] mx-auto">
-        暂无清理计划
-      </p>
-      <button class="btn mt-5" :disabled="busy === 'preview'" @click="preview">生成清单</button>
-    </section>
-
-    <!-- 清单 -->
-    <section v-if="plan" class="panel overflow-hidden">
-      <div class="panel-head">
-        <div class="flex items-center gap-3">
-          <div class="text-[14.5px] font-semibold">要清理的转发</div>
-          <span class="text-[12px] muted">
-            {{ items.length }} 条 · 已勾选 <span style="color: var(--accent)">{{ chosen.length }}</span>
-          </span>
-        </div>
-        <div v-if="!locked" class="flex items-center gap-2">
-          <button class="link-btn" @click="toggleAll(true)">全选</button>
-          <span class="text-[11px] muted">/</span>
-          <button class="link-btn" @click="toggleAll(false)">全不选</button>
+        <div v-if="!locked" class="toolbar">
+          <button class="mini" @click="toggleAll(true)">全选</button>
+          <button class="mini" @click="toggleAll(false)">全不选</button>
         </div>
       </div>
 
-      <div class="overflow-x-auto">
-        <table class="tidy-table w-full text-[13.5px]">
-          <thead>
-            <tr class="text-[12px] muted" style="background: var(--surface-2)">
-              <th class="w-10 px-3 py-2.5 text-left font-normal"></th>
-              <th class="px-2 py-2.5 text-left font-normal">UP</th>
-              <th class="px-2 py-2.5 text-left font-normal">活动奖品</th>
-              <th class="px-2 py-2.5 text-left font-normal">动态</th>
-              <th class="px-2 py-2.5 text-left font-normal whitespace-nowrap">状态</th>
-              <th class="px-3 py-2.5 text-left font-normal">说明</th>
-            </tr>
-          </thead>
+      <div class="list-scroll">
+        <table class="dense tidy-table">
+          <thead><tr><th class="pick-col"></th><th class="up-col">UP</th><th class="cell-align-start">活动奖品</th><th class="dyn-col">动态</th><th class="state-col">状态</th><th class="cell-align-start reason-col">说明</th></tr></thead>
           <tbody>
-            <tr
-              v-for="item in items"
-              :key="item.id"
-              class="border-t row-hover"
-              :style="[
-                { borderColor: 'var(--line-soft)' },
-                item.state === 'dropped' ? { opacity: 0.42 } : {},
-              ]"
-            >
-              <td class="px-3 py-2.5">
+            <tr v-for="item in items" :key="item.id" :class="{ 'row-off': item.state === 'dropped' }">
+              <td class="pick-col">
                 <button
                   class="box"
                   role="checkbox"
@@ -316,24 +292,20 @@ onMounted(async () => {
                   </svg>
                 </button>
               </td>
-              <td class="px-2 py-2.5 dim truncate max-w-[110px]">{{ item.up_name || '—' }}</td>
-              <td class="px-2 py-2.5 truncate max-w-[280px]">{{ item.reward || '奖品待补全' }}</td>
-              <td class="px-2 py-2.5"><span class="kbd">{{ item.dyn_id }}</span></td>
-              <td class="px-2 py-2.5 whitespace-nowrap">
+              <td class="up-col">{{ item.up_name || '—' }}</td>
+              <td class="cell-align-start prize-cell">{{ item.reward || '奖品待补全' }}</td>
+              <td class="dyn-col"><span class="kbd">{{ item.dyn_id }}</span></td>
+              <td class="state-col">
                 <span class="chip" :class="{
                   'chip-ok': item.state === 'done',
                   'chip-danger': item.state === 'failed',
                   'chip-warn': item.state === 'skipped',
                   'chip-accent': item.state === 'pending',
                 }">
-                  {{
-                    { pending: '待执行', dropped: '已取消', done: '已删除', failed: '失败', skipped: '跳过' }[
-                      item.state
-                    ] ?? item.state
-                  }}
+                  {{ { pending: '待执行', dropped: '已取消', done: '已删除', failed: '失败', skipped: '跳过' }[item.state] ?? item.state }}
                 </span>
               </td>
-              <td class="px-3 py-2.5 muted text-[12.5px] truncate max-w-[240px]" :title="item.reason">
+              <td class="cell-align-start reason-col" :title="item.reason">
                 <template v-if="item.reason">{{ item.reason }}</template>
                 <template v-else-if="item.decided_at">未中奖 · {{ fmt(item.decided_at) }} 判定</template>
                 <template v-else>—</template>
@@ -343,75 +315,39 @@ onMounted(async () => {
         </table>
       </div>
 
-      <!-- 执行按钮区 -->
-      <div class="px-4 py-3 flex items-center justify-between gap-3 flex-wrap border-t" style="border-color: var(--line-soft); background: var(--surface-2)">
-        <div class="text-[12px] muted flex items-center gap-1.5">
+      <footer class="list-footer tidy-footer">
+        <div class="gate-line">
           <span class="dot" :style="{ color: gate?.open ? 'var(--ok)' : 'var(--danger)' }" />
           <template v-if="!gate">闸门状态未知</template>
           <template v-else-if="gate.paused">已手动暂停，执行会被拒绝</template>
           <template v-else-if="!gate.open">{{ gate.reason }}</template>
           <template v-else>闸门开启，可以执行</template>
         </div>
-
-        <div class="flex items-center gap-2">
-          <button v-if="plan.state === 'previewed'" class="btn" :disabled="busy === 'confirm' || !chosen.length || locked" @click="confirming = true">
-            确认这 {{ chosen.length }} 条
-          </button>
+        <div class="toolbar">
+          <button v-if="plan.state === 'previewed'" class="primary" :disabled="busy === 'confirm' || !chosen.length || locked" @click="confirming = true">确认这 {{ chosen.length }} 条</button>
           <template v-else-if="plan.state === 'confirmed'">
-            
-            <button class="btn btn-danger" :disabled="!!busy || !gate?.open" @click="askApply">
-              {{ busy === 'apply' ? '执行中…' : '真的执行' }}
-            </button>
+            <button class="btn btn-danger" :disabled="!!busy || !gate?.open" @click="askApply">{{ busy === 'apply' ? '执行中…' : '真的执行' }}</button>
           </template>
-          <button v-else-if="plan.state === 'done' || plan.state === 'aborted'" class="btn" :disabled="busy === 'preview'" @click="preview">
-            更新清单
-          </button>
+          <button v-else-if="plan.state === 'done' || plan.state === 'aborted'" class="btn" :disabled="busy === 'preview'" @click="preview">更新清单</button>
         </div>
-      </div>
+      </footer>
     </section>
 
     <!-- 真删的二次确认 -->
-    <Teleport to="body">
-      <div v-if="confirming && plan" class="overlay">
-        <div class="dialog enter">
-          <div class="text-[16px] font-semibold" style="color: var(--danger)">确认这一批清单？</div>
-          <p class="text-[13px] dim mt-2.5 leading-relaxed">
-            确认后这 {{ chosen.length }} 条会被锁定，不能再改。<br />
-            真正的删除还要再点一次，并且要过闸门检查。
-          </p>
-          <div class="mt-3 p-2.5 rounded-lg max-h-[150px] overflow-auto text-[12.5px]" style="background: var(--surface-2)">
-            <div v-for="item in chosen" :key="item.id" class="flex items-center gap-2 py-0.5">
-              <span class="dot" style="color: var(--accent)" />
-              <span class="truncate flex-1">{{ item.reward || item.up_name }}</span>
-              <span class="kbd">{{ item.dyn_id }}</span>
-            </div>
-          </div>
-          <div class="flex justify-end gap-2 mt-4">
-            <button class="btn" @click="confirming = false">再想想</button>
-            <button class="btn btn-accent" :disabled="busy === 'confirm'" @click="confirm">确认</button>
-          </div>
-        </div>
+    <Modal v-if="confirming && plan" title="确认这一批清单？" @close="confirming = false">
+      <p class="text-[13px] dim leading-relaxed">确认后这 {{ chosen.length }} 条会被锁定，不能再改。真正的删除还要再点一次，并且要过闸门检查。</p>
+      <div class="confirm-list">
+        <div v-for="item in chosen" :key="item.id" class="confirm-row"><span class="dot" style="color: var(--accent)" /><span class="truncate flex-1">{{ item.reward || item.up_name }}</span><span class="kbd">{{ item.dyn_id }}</span></div>
       </div>
+      <div class="modal-actions"><button class="btn" @click="confirming = false">再想想</button><button class="btn btn-accent" :disabled="busy === 'confirm'" @click="confirm">确认</button></div>
+    </Modal>
 
-      <div v-if="plan && plan.state === 'confirmed' && showApply" class="overlay">
-        <div class="dialog enter" style="max-width: 400px">
-          <div class="text-[16px] font-semibold" style="color: var(--danger)">这一步会真的删除</div>
-          <p class="text-[13px] dim mt-2.5 leading-relaxed">
-            删除的是你自己空间里转发的那 {{ chosen.length }} 条动态。B 站没有回收站，
-            删掉之后找不回来。<br />
-            取关那部分倒是可以重新关注，但关注时间和分组不会回来。
-          </p>
-          <p class="text-[13px] mt-3 mb-1.5" style="color: var(--text)">
-            请输入 <span class="font-semibold" style="color: var(--danger)">删除</span> 两个字继续
-          </p>
-          <input v-model="confirmation" class="ipt" placeholder="删除" @keyup.enter="canApply && doApply()" />
-          <div class="flex justify-end gap-2 mt-4">
-            <button class="btn" @click="showApply = false">取消</button>
-            <button class="btn btn-danger" :disabled="!canApply || !!busy" @click="doApply">确认删除</button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
+    <Modal v-if="plan && plan.state === 'confirmed' && showApply" title="这一步会真的删除" @close="showApply = false">
+      <p class="text-[13px] dim leading-relaxed">删除的是你自己空间里转发的那 {{ chosen.length }} 条动态。B 站没有回收站，删掉之后找不回来。取关那部分倒是可以重新关注，但关注时间和分组不会回来。</p>
+      <p class="text-[13px] mt-3 mb-1.5">请输入 <span class="font-semibold" style="color: var(--danger)">删除</span> 两个字继续</p>
+      <input v-model="confirmation" class="ipt" placeholder="删除" @keyup.enter="canApply && doApply()" />
+      <div class="modal-actions"><button class="btn" @click="showApply = false">取消</button><button class="btn btn-danger" :disabled="!canApply || !!busy" @click="doApply">确认删除</button></div>
+    </Modal>
 
     <!-- 这次不动 -->
     <section v-if="rejected.length" class="panel">
@@ -419,8 +355,8 @@ onMounted(async () => {
         <div class="text-[14.5px] font-semibold">这次不动的记录</div>
         <span class="text-[12px] muted">共 {{ rejected.length }} 条 · 每条都写了原因</span>
       </div>
-      <div class="divide-y" style="border-color: var(--line-soft)">
-        <div v-for="line in rejected" :key="line.dyn_id" class="flex items-center gap-3 px-4 py-2">
+      <div class="plain-list">
+        <div v-for="line in rejected" :key="line.dyn_id" class="plain-row">
           <span class="kbd w-[130px] flex-none truncate">{{ line.dyn_id }}</span>
           <span class="text-[13px] dim w-[100px] flex-none truncate">{{ line.up_name || '—' }}</span>
           <span class="text-[12.5px] muted flex-1">{{ line.reason }}</span>
@@ -439,41 +375,26 @@ onMounted(async () => {
         </div>
         <span class="text-[12px] muted">{{ report.note }}</span>
       </div>
-      <div class="divide-y" style="border-color: var(--line-soft)">
-        <div v-for="line in report.items" :key="line.item_id" class="flex items-center gap-3 px-4 py-2.5">
-          <span
-            class="w-1.5 h-1.5 rounded-full flex-none"
-            :style="{ background: line.state === 'done' ? 'var(--ok)' : line.state === 'failed' ? 'var(--danger)' : line.state === 'planned' ? 'var(--accent)' : 'var(--muted)' }"
-          />
+      <div class="plain-list">
+        <div v-for="line in report.items" :key="line.item_id" class="plain-row">
+          <span class="w-1.5 h-1.5 rounded-full flex-none" :style="{ background: line.state === 'done' ? 'var(--ok)' : line.state === 'failed' ? 'var(--danger)' : line.state === 'planned' ? 'var(--accent)' : 'var(--muted)' }" />
           <span class="text-[13px] w-[100px] flex-none truncate">{{ line.up_name || '—' }}</span>
           <span class="kbd w-[130px] flex-none truncate">{{ line.dyn_id }}</span>
           <span class="text-[12.5px] muted flex-1 truncate">{{ line.message }}</span>
         </div>
       </div>
-      <div v-if="report.snapshot" class="px-4 py-2 text-[11.5px] muted" style="border-top: 1px solid var(--line-soft)">
-        执行前已备份到 <span class="kbd">{{ report.snapshot }}</span> —— 删转发回不来，这份文件是事后唯一能核对"当时清单长什么样"的东西。
-      </div>
+      <div v-if="report.snapshot" class="snapshot-note">执行前已备份到 <span class="kbd">{{ report.snapshot }}</span> —— 删转发回不来，这份文件是事后唯一能核对"当时清单长什么样"的东西。</div>
     </section>
 
     <!-- 历史计划 -->
     <section v-if="summary.length > 1" class="panel">
       <div class="panel-head"><div class="text-[14.5px] font-semibold">历史计划</div></div>
-      <div class="divide-y" style="border-color: var(--line-soft)">
-        <button
-          v-for="row in summary"
-          :key="row.id"
-          class="w-full flex items-center gap-3 px-4 py-2.5 text-left row-hover hist-row"
-          :class="plan && plan.plan_id === row.id ? 'hist-on' : ''"
-          @click="open(row.id)"
-        >
+      <div class="plain-list">
+        <button v-for="row in summary" :key="row.id" class="plain-row hist-row" :class="plan && plan.plan_id === row.id ? 'hist-on' : ''" @click="open(row.id)">
           <span class="kbd w-10 flex-none">#{{ row.id }}</span>
-          <span class="chip" :class="row.state === 'done' ? 'chip-ok' : row.state === 'aborted' ? 'chip-warn' : ''">
-            {{ PLAN_LABEL[row.state] ?? row.state }}
-          </span>
+          <span class="chip" :class="row.state === 'done' ? 'chip-ok' : row.state === 'aborted' ? 'chip-warn' : ''">{{ PLAN_LABEL[row.state] ?? row.state }}</span>
           <span class="text-[12.5px] muted flex-1 truncate">{{ row.note || `共 ${row.total} 条` }}</span>
-          <span class="text-[12px] muted tabular-nums flex-none">
-            已完成 {{ row.done }} / {{ row.total }}
-          </span>
+          <span class="text-[12px] muted tabular-nums flex-none">已完成 {{ row.done }} / {{ row.total }}</span>
           <span class="text-[11.5px] muted w-[92px] text-right flex-none">{{ fmt(row.created_at) }}</span>
         </button>
       </div>
@@ -482,153 +403,60 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-/* 关掉 preflight 之后，原生 button 会带着浏览器默认的浅灰底。
-   历史计划那几行是 <button>，不显式清掉就会在深色界面里白一块。 */
-.hist-row {
-  background: transparent;
-  border: none;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-/* 当前打开的那一条用左侧色条标记。只靠背景色区分，在深色里差 3% 亮度根本看不出来。 */
-.hist-on {
-  background: var(--accent-soft);
-  box-shadow: inset 2px 0 0 var(--accent);
-}
-.step-dot {
-  width: 20px;
-  height: 20px;
-  border-radius:var(--radius-pill);
-  display: grid;
-  place-items: center;
-  font-size: 11.5px;
-  font-weight: 600;
-  border: 1px solid var(--line);
-  color: var(--muted);
-  background: var(--surface-2);
-}
-.step-on {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #0a0c10;
-}
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 31px;
-  padding: 0 13px;
-  border-radius:var(--radius-control);
-  border: 1px solid var(--line);
-  background: var(--surface-3);
-  color: var(--text);
-  font-size:var(--text-meta);
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.14s ease;
-}
-.btn:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-.btn:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-.btn-accent {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #0a0c10;
-  font-weight: 600;
-}
-.btn-accent:hover:not(:disabled) {
-  color: #0a0c10;
-  filter: brightness(1.07);
-}
-.btn-danger {
-  border-color: var(--danger);
-  color: var(--danger);
-  background: var(--danger-soft);
-}
-.btn-danger:hover:not(:disabled) {
-  color: #fff;
-  background: var(--danger);
-  border-color: var(--danger);
-}
-.link-btn {
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  font-size: 12px;
-  cursor: pointer;
-  padding: 2px 4px;
-  border-radius: 5px;
-}
-.link-btn:hover {
-  color: var(--accent);
-  background: var(--accent-soft);
-}
-.box {
-  width: 20px;
-  height: 20px;
-  min-height:0;
-  padding:0;
-  margin:auto;
-  flex:none;
-  border-radius: 5px;
-  border: 1.5px solid var(--line);
-  background: transparent;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  transition: all 0.12s ease;
-}
-.box:hover:not(:disabled) {
-  border-color: var(--accent);
-}
-.box-on {
-  background: var(--accent);
-  border-color: var(--accent);
-  color:var(--bg);
-}
+.tidy-workspace{max-width:1440px;margin:auto;display:flex;flex-direction:column;gap:18px;padding-bottom:8px}
+
+/* 空态：一句说明 + 一个按钮，不要一整片白。 */
+.empty-panel{display:grid;justify-items:center;gap:10px;padding:56px 24px;text-align:center;color:var(--muted)}
+.empty-panel :deep(.ui-icon){color:var(--accent)}
+.empty-panel p{max-width:420px;line-height:1.7}
+
+/* 四步状态条挪到列表头里：它说明的是"这一批清单走到哪了"，
+   单独占一整块面板只会把表格往下推。 */
+.tidy-head{gap:16px;flex-wrap:wrap}
+.steps{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.step{display:flex;align-items:center;gap:7px}
+.step-dot{width:20px;height:20px;border-radius:var(--radius-pill);display:grid;place-items:center;font-size:var(--text-small);font-weight:600;border:1px solid var(--line);color:var(--muted);background:var(--surface-2)}
+.step-on{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.step-label{font-size:var(--text-meta);color:var(--muted)}
+.step-label-on{color:var(--text)}
+.step-label-now{font-weight:600}
+.step-line{width:26px;height:1px;margin:0 3px;background:var(--line)}
+.step-line-on{background:var(--accent)}
+
+.tidy-table{width:100%;min-width:960px;table-layout:fixed}
+.tidy-table td,.tidy-table th{white-space:normal;overflow:visible}
+.tidy-table tbody td{border-bottom:1px solid var(--line-soft)}
+.tidy-table tbody tr:last-child td{border-bottom:0}
+.tidy-table tbody tr:hover{background:var(--surface-2)}
+.tidy-table .row-off{opacity:.42}
+.pick-col{width:52px;padding-inline:10px!important}
+.up-col{width:130px;color:var(--text-dim)}
+.prize-cell{min-width:260px;font-weight:600;line-height:1.6;padding-inline:14px!important}
+.dyn-col{width:140px}
+.state-col{width:104px}
+.reason-col{width:300px;color:var(--muted);line-height:1.6;padding-inline:14px!important}
+
+.tidy-footer{justify-content:space-between;flex-wrap:wrap}
+.gate-line{display:flex;align-items:center;gap:8px;font-size:var(--text-meta);color:var(--text-dim);min-width:0}
+
+/* 勾选框。原生 checkbox 在深色里是一块白，自己画。 */
+.box{width:20px;height:20px;min-height:0;padding:0;margin:auto;flex:none;border-radius:var(--radius-tiny);border:1.5px solid var(--line);background:transparent;display:grid;place-items:center;cursor:pointer;transition:all .12s ease}
+.box:hover:not(:disabled){border-color:var(--accent)}
+.box-on{background:var(--accent);border-color:var(--accent);color:var(--bg)}
 .box-on:hover:not(:disabled){color:var(--bg)}
 :global(html.light) .box-on,:global(html.light) .box-on:hover:not(:disabled){color:#fff}
-.box:disabled {
-  cursor: default;
-  opacity: 0.7;
-}
-.overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 9000;
-  display: grid;
-  place-items: center;
-  background: rgba(6, 8, 11, 0.62);
-  backdrop-filter: blur(2px);
-}
-.dialog {
-  width: 440px;
-  max-width: calc(100vw - 32px);
-  padding: 20px;
-  border-radius: 14px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.7);
-}
-.ipt {
-  width: 100%;
-  height: 33px;
-  padding: 0 10px;
-  border-radius:var(--radius-control);
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  color: var(--text);
-  font-size: 13.5px;
-  outline: none;
-}
-.ipt:focus {
-  border-color: var(--danger);
-}
-.tidy-table td:nth-child(4),.tidy-table td:nth-child(5){text-align:center;vertical-align:middle}
+.box:disabled{cursor:default;opacity:.7}
+
+/* 列表型块（这次不动 / 执行结果 / 历史计划）：行与行之间只留一条线。 */
+.plain-list{display:flex;flex-direction:column}
+.plain-row{display:flex;align-items:center;gap:12px;width:100%;padding:10px 18px;border-top:1px solid var(--line-soft);text-align:left}
+.plain-row:first-child{border-top:0}
+.plain-row:hover{background:var(--surface-2)}
+.hist-row{background:transparent;border-left:0;border-right:0;border-bottom:0;border-radius:0;color:inherit;font:inherit;cursor:pointer}
+.hist-on{background:var(--accent-soft);box-shadow:inset 2px 0 0 var(--accent)}
+.hist-on:hover{background:var(--accent-soft)}
+
+.snapshot-note{padding:10px 18px;font-size:var(--text-small);color:var(--muted);border-top:1px solid var(--line-soft)}
+.confirm-list{margin-top:14px;padding:10px;border-radius:var(--radius-control);background:var(--surface-2);max-height:180px;overflow:auto}
+.confirm-row{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:var(--text-meta)}
 </style>

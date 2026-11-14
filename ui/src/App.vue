@@ -32,19 +32,26 @@ const appVersion = __APP_VERSION__
 const tasksOpen=ref(false)
 const resultAttention=ref(0)
 const messageAttention=computed(()=>Math.max(state.unreadMessages||0,Math.max(0,(state.gate?.unread_chat||0)-(state.gate?.acked_chat||0))+Math.max(0,(state.gate?.unread_system||0)-(state.gate?.acked_system||0))))
-function badge(path:string){return path==='/campaigns'?(state.queueCount||0):path==='/results'?resultAttention.value+messageAttention.value:0}
-function badgeTitle(path:string){return path==='/campaigns'?`${state.queueCount||0} 条待参与`:`${messageAttention.value} 条待看消息 · ${resultAttention.value} 条待核对`}
+function badge(path:string){return path==='/campaigns'?(state.queueCount||0):path==='/results'?resultAttention.value:path==='/standby'?messageAttention.value:0}
+function badgeTitle(path:string){
+  if(path==='/campaigns')return `${state.queueCount||0} 条待参与`
+  if(path==='/standby')return messageAttention.value?`${messageAttention.value} 条消息未看 · 当前账号`:'挂机运作'
+  return resultAttention.value?`${resultAttention.value} 条需要人看一眼（待核对 / 缺 UP 信息）`:'获奖校验'
+}
 async function refreshAttention(){const owner=accountKey.value;try{const r=await req<{account_id:number;results:number}>('/api/history/attention');if(owner===accountKey.value&&r.account_id===owner)resultAttention.value=r.results}catch{}}
 
 const taskPanel=ref<InstanceType<typeof Auto>>()
 const closeTasks=()=>taskPanel.value?.mayLeave()??true
 const groups = computed(() => [
-  {label:'概览',color:'var(--text-dim)',items:[{to:'/',label:'概览'}]},
-  {label:'挂机中心',color:'var(--accent)',items:[{to:'/standby',label:'挂机中心'}]},
-  {label:'发现与参与',color:'var(--discover)',items:[{to:'/campaigns',label:'发现奖品'},{to:'/pool',label:'待参与'},{to:'/sources',label:'订阅源'},{to:'/shelf',label:'往期架'},{to:'/cleaned',label:'已清理'}]},
-  {label:'开奖与消息',color:'var(--warn)',items:[{to:'/results',label:'开奖核验'},{to:'/inbox',label:'消息'},{to:'/tidy',label:'清理'}]},
-  ...extraNav.filter(x=>x.to!='/exchange').map(x=>({label:x.label,color:'var(--editor)',items:[x]})),
-  {label:'管理',color:'var(--muted)',items:[{to:'/settings',label:'设置'},{to:'/blocks',label:'UP 黑名单'},...extraNav.filter(x=>x.to==='/exchange'),{to:'/activity',label:'运行记录'}]},
+  {label:'运营中心',color:'var(--text-dim)',items:[{to:'/',label:'运营中心',hidden:false}]},
+  /* 消息不再单独占一个页签：它是"哪个账号有新消息"，属于挂机运作的上下文。
+     仍然留在 items 里（hidden），这样停在 /inbox 时侧栏高亮还是「挂机运作」，
+     但页签条里不会多出一个入口。 */
+  {label:'挂机运作',color:'var(--accent)',items:[{to:'/standby',label:'挂机运作',hidden:false},{to:'/inbox',label:'消息',hidden:true}]},
+  {label:'活动中心',color:'var(--discover)',items:[{to:'/campaigns',label:'发现奖品',hidden:false},{to:'/pool',label:'待参与',hidden:false},{to:'/sources',label:'订阅源',hidden:false},{to:'/shelf',label:'往期架',hidden:false},{to:'/cleaned',label:'已清理',hidden:false}]},
+  {label:'获奖校验',color:'var(--warn)',items:[{to:'/results',label:'开奖核验',hidden:false},{to:'/tidy',label:'清理',hidden:false}]},
+  ...extraNav.filter(x=>x.to!='/exchange').map(x=>({label:x.label,color:'var(--editor)',items:[{...x,hidden:false}]})),
+  {label:'管理设置',color:'var(--muted)',items:[{to:'/settings',label:'设置',hidden:false},...extraNav.filter(x=>x.to==='/exchange').map(x=>({...x,hidden:false})),{to:'/activity',label:'运行记录',hidden:false}]},
 ])
 const section=computed(()=>groups.value.find(g=>g.items.some(x=>x.to===route.path)) || groups.value[0]!)
 const dragging = ref(false)
@@ -187,8 +194,8 @@ watch(accountKey,()=>{resultAttention.value=0;void refreshAttention();taskProgre
             </div>
           </header>
 
-          <nav v-if="section.items.length>1" class="workspace-tabs" :style="{'--section-color':section.color}" aria-label="页内导航">
-            <RouterLink v-for="tab in section.items" :key="tab.to" :to="tab.to" :class="{'selected':route.path===tab.to,'risk-tab':tab.to==='/tidy'}" :aria-current="route.path===tab.to?'page':undefined"><Icon :name="navIcon(tab.to)" :size="16"/><span>{{tab.label}}</span><span v-if="tab.to==='/inbox'&&messageAttention" class="nav-badge">{{messageAttention}}</span><span v-if="tab.to==='/pool'" class="tab-count" aria-label="待参与条数">{{state.queueCount??'—'}}</span></RouterLink>
+          <nav v-if="section.items.filter(t=>!t.hidden).length>1" class="workspace-tabs" :style="{'--section-color':section.color}" aria-label="页内导航">
+            <RouterLink v-for="tab in section.items.filter(t=>!t.hidden)" :key="tab.to" :to="tab.to" :class="{'selected':route.path===tab.to,'risk-tab':tab.to==='/tidy'}" :aria-current="route.path===tab.to?'page':undefined"><Icon :name="navIcon(tab.to)" :size="16"/><span>{{tab.label}}</span><span v-if="tab.to==='/inbox'&&messageAttention" class="nav-badge">{{messageAttention}}</span><span v-if="tab.to==='/pool'" class="tab-count" aria-label="待参与条数">{{state.queueCount??'—'}}</span></RouterLink>
           </nav>
           <div class="app-content flex-1 overflow-y-auto px-5 py-4">
             <RouterView v-slot="{ Component }">

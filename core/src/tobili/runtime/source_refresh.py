@@ -91,6 +91,18 @@ class SourceRefresh:
             interval = max(
                 30, min(1440, int(box.repos.settings.get(owner, "sources.interval", "60")))
             )
+            if feed["kind"] == "topic":
+                # 话题是广撒网：一页 20 条里能确认成官方活动的常常不到一条，却和
+                # 专栏索引抢同一个轮转额度。默认把它压到 6 小时，让索引源先跑。
+                # 账号自己的设置优先，没设过就取全局那条。
+                raw = box.repos.settings.get(owner, "sources.topic.interval_hours", "") or (
+                    box.repos.settings.get(0, "sources.topic.interval_hours", "6")
+                )
+                try:
+                    hours = float(raw)
+                except (TypeError, ValueError):
+                    hours = 6.0
+                interval = max(interval, min(1440, int(hours * 60)))
             delay = interval * 60
             box.repos.settings.put(owner, key, str(time.time() + delay))
             if getattr(box, "bus", None):

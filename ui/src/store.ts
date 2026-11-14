@@ -159,6 +159,7 @@ const TOPIC_TEXT: Record<string, string> = {
   'notify.sent': '通知已发出',
   'schedule.round': '账号排期完成',
   'notify.failed': '通知没发出去',
+  'exchange.review': '识别资料修订',
 }
 
 export function describeEvent(topic: string, payload: Record<string, unknown>): string {
@@ -194,7 +195,9 @@ export function startInboxWatch() {
     try {
       const previous=knownByAccount.get(owner)
       const known=previous||[]
-      const view = await api.inbox(1, 40)
+      // 和消息页用同一个分页（1/60）：服务端按这个键缓存两分钟，
+      // 两边读的是同一份，不会一边读完另一边又开始读。
+      const view = await api.inbox(1, 60)
       if(epoch!==accountEpoch||owner!==currentAccount())return
       const fresh = view.items.filter((item) => item.prize && item.unread && !known.includes(item.key))
       state.prizes = view.counts.prize
