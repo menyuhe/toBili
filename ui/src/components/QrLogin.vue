@@ -67,6 +67,7 @@ function poll() {
         toast(`欢迎回来，${result.account?.nickname ?? ''}`, 'ok')
         await refreshAll()
         emit('done', result.account)
+        window.dispatchEvent(new Event('tobili:signed-in'))
       }
     } catch {
       // 网络抖一下就重试下一轮，不打断扫码节奏

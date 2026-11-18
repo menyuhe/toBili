@@ -69,6 +69,7 @@ TASK_CATEGORY = {
     "results": "results",
     "messages": "results",
     "cleanup": "results",
+    "lost_shares": "results",
 }
 TASK_LABEL = {
     "topics": "话题",
@@ -78,6 +79,7 @@ TASK_LABEL = {
     "results": "核验",
     "messages": "消息",
     "cleanup": "清理",
+    "lost_shares": "清理未中奖转发",
 }
 # 老记录没有再带任务名，只能靠标题前缀认。
 TITLE_CATEGORY = (

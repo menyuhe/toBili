@@ -174,6 +174,9 @@ def scan(
     account = box.account()
     if account is None:
         raise HTTPException(status_code=401, detail="还没有登录")
+    from ...runtime.resource_access import require
+
+    require(box, account[0])
     try:
         with box.lanes.exclusive(account[0]):
             report = box.scan_feeds().run(

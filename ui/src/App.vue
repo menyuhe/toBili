@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { extraNav } from './extensions'
+import { extraNav, extraWidgets } from './extensions'
 import { useRoute } from 'vue-router'
 
 import Modal from './components/Modal.vue'
@@ -213,6 +213,7 @@ watch(accountKey,()=>{resultAttention.value=0;void refreshAttention();taskProgre
 
       <Modal v-if="tasksOpen" title="定时任务" :can-close="closeTasks" @close="tasksOpen=false"><Auto ref="taskPanel" embedded :key="accountKey" @navigate="tasksOpen=false"/></Modal>
       <Toasts @dismiss="dismiss" />
+      <component v-for="(widget,index) in extraWidgets" :key="index" :is="widget"/>
 </template>
 
 <style scoped>

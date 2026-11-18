@@ -62,6 +62,9 @@ class StubGateway:
         self.inbox_fails = False
 
     # Prober
+    def unfollow_protection(self, uid, expected_mtime=""):
+        return ""
+
     def did(self, action: ActionKind, *, dyn_id: str, payload: Mapping[str, str]) -> ProbeState:
         self.probes.append((action, dyn_id))
         return self.probe

@@ -74,9 +74,14 @@ class PlanTidy:
         *,
         limit: int | None = None,
         persist: bool = True,
+        automatic: bool = False,
     ) -> TidyPreview:
         now = self._clock.now()
         rows = self._verdicts.lost_before(account_id, before=now)
+        if automatic:
+            from ..domain.result import confirmed_loss
+
+            rows = [row for row in rows if confirmed_loss(row)]
         cleaned = self._tidy.cleaned_campaign_ids(account_id)
         kept = self._kept_entries(account_id)
 
@@ -98,7 +103,16 @@ class PlanTidy:
         picked: list[TidyCandidate] = []
         cap = limit if limit is not None else self._policy.max_per_round
 
-        for candidate in plan_order(candidates):
+        ordered = plan_order(candidates)
+        if automatic:
+            attempts = self._tidy.last_share_checks(account_id)
+            ordered.sort(
+                key=lambda c: (
+                    attempts.get(c.dyn_id, 0),
+                    -c.decided_at.timestamp() if c.decided_at else 0,
+                )
+            )
+        for candidate in ordered:
             hit = keep_hit(kept, up_uid=candidate.up_uid, dyn_id=candidate.dyn_id)
             verdict = judge(
                 candidate,

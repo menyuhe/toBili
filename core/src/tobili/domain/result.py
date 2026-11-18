@@ -55,6 +55,13 @@ class Decision:
     evidence: str
 
 
+OFFICIAL_LOSS = "官方完整名单中未包含本账号"
+
+
+def confirmed_loss(row):
+    return row and (row.get("source") == "manual" or row.get("evidence") == OFFICIAL_LOSS)
+
+
 def official_decision(notice: dict, uid: str) -> Decision:
     """A negative conclusion requires a complete, internally consistent UID roster."""
     roster = notice.get("lottery_result")
@@ -81,7 +88,7 @@ def official_decision(notice: dict, uid: str) -> Decision:
         )
         winners.extend(ids)
     if complete and winners and len(winners) == len(set(winners)):
-        return Decision(Outcome.LOST, "官方完整名单中未包含本账号")
+        return Decision(Outcome.LOST, OFFICIAL_LOSS)
     return Decision(Outcome.PENDING, "官方名单不完整，待确认")
 
 

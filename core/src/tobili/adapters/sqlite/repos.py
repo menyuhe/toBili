@@ -807,22 +807,34 @@ class CampaignRepo:
                 f"""SELECT CASE
             WHEN EXISTS(SELECT 1 FROM up_block b WHERE b.uid=c.up_uid AND b.active=1) THEN 'UP 已屏蔽'
             WHEN EXISTS(SELECT 1 FROM closed_shelf s WHERE s.account_id=? AND s.campaign_id=c.id) THEN '已收存'
+            WHEN EXISTS(SELECT 1 FROM catalog_removed x WHERE x.dyn_id=c.dyn_id) THEN '已移出目录'
             WHEN {_EXPIRES} IS NOT NULL AND {_EXPIRES}<=? THEN '已截止'
             WHEN c.draw_state='ended' THEN '已截止'
             WHEN c.draw_state IN ('unverified','unsupported') THEN '参与方式待核对'
             WHEN e.id IS NOT NULL AND e.stage!='planned' THEN '已有参与记录'
             WHEN c.kind='unknown' OR c.confidence<? THEN '参与方式待核对'
+            WHEN EXISTS(SELECT 1 FROM setting WHERE account_id=0 AND key='catalog.curated' AND value='1') AND (c.reward_status NOT IN ('verified','manual') OR trim(c.reward)='' OR c.kind='check_in' OR {_EXPIRES} IS NULL) THEN '目录资料待补全'
+            WHEN EXISTS(SELECT 1 FROM pool_item p WHERE p.account_id=? AND p.campaign_id=c.id AND p.state IN ('review','failed')) THEN '队列待处理'
             ELSE '可参与' END candidate_reason,COUNT(*) amount
             FROM campaign c LEFT JOIN enrollment e ON e.campaign_id=c.id AND e.account_id=?
             GROUP BY candidate_reason""",
-                (account_id, stamp(now), floor, account_id),
+                (account_id, stamp(now), floor, account_id, account_id),
             )
             .fetchall()
         )
         counts = {r["candidate_reason"]: r["amount"] for r in rows}
         details = "、".join(
             f"{key} {counts[key]} 条"
-            for key in ("参与方式待核对", "已截止", "已有参与记录", "UP 已屏蔽", "已收存")
+            for key in (
+                "参与方式待核对",
+                "目录资料待补全",
+                "队列待处理",
+                "已截止",
+                "已有参与记录",
+                "UP 已屏蔽",
+                "已收存",
+                "已移出目录",
+            )
             if counts.get(key)
         )
         return "待参与为空；奖品库暂无自动候选" + (f"：{details}" if details else "")
@@ -1126,6 +1138,8 @@ class IntentRepo:
         fault: str,
         message: str,
         now: datetime,
+        follow_uid: str | None = None,
+        follow_mtime: int = 0,
     ) -> None:
         state = "done" if ok else ("unknown" if ambiguous else "rejected")
         with self._db.write() as conn:
@@ -1140,6 +1154,21 @@ class IntentRepo:
                     intent_id,
                 ),
             )
+
+            if follow_uid and follow_mtime and ok:
+                conn.execute(
+                    "INSERT INTO task_follow(account_id,up_uid,campaign_id,mtime) "
+                    "SELECT i.account_id,c.up_uid,c.id,? FROM intent i JOIN campaign c ON c.id=i.campaign_id "
+                    "WHERE i.id=? AND i.action='follow' AND c.up_uid=? "
+                    "ON CONFLICT(account_id,up_uid) DO UPDATE SET campaign_id=excluded.campaign_id,mtime=excluded.mtime",
+                    (follow_mtime, intent_id, follow_uid),
+                )
+                conn.execute(
+                    "INSERT INTO participation_ref(account_id,campaign_id,followed_before,follow_added)"
+                    " SELECT account_id,campaign_id,0,1 FROM intent WHERE id=? AND action='follow'"
+                    " ON CONFLICT(account_id,campaign_id) DO UPDATE SET followed_before=0,follow_added=1",
+                    (intent_id,),
+                )
 
     def unresolved(self, account_id: int) -> Sequence[dict[str, object]]:
         rows = self._db.connect().execute(
@@ -1268,7 +1297,7 @@ class VerdictRepo:
         """
         rows = self._db.connect().execute(
             "SELECT v.campaign_id, v.decided_at, c.dyn_id, c.up_uid, c.up_name, c.title,"
-            " MIN(e.id) AS enrollment_id FROM verdict v"
+            " v.source, v.evidence, MIN(e.id) AS enrollment_id FROM verdict v"
             " JOIN campaign c ON c.id = v.campaign_id"
             " LEFT JOIN enrollment e ON e.campaign_id = v.campaign_id"
             " AND e.account_id = v.account_id"
@@ -1344,7 +1373,10 @@ class TidyRepo:
         """
         rows = self._db.connect().execute(
             "SELECT i.id, i.campaign_id, i.action, i.target, i.snapshot, i.state, i.reason,"
-            " c.dyn_id, c.up_uid, c.title, c.up_name FROM tidy_item i"
+            " c.dyn_id, c.up_uid, c.title, c.up_name, r.share_id AS verified_share FROM tidy_item i"
+            " JOIN tidy_plan p ON p.id=i.plan_id"
+            " LEFT JOIN participation_ref r ON r.account_id=p.account_id AND r.campaign_id=i.campaign_id"
+            " AND r.link_state='verified'"
             " JOIN campaign c ON c.id = i.campaign_id"
             " WHERE i.plan_id = ? AND i.state = 'pending' ORDER BY i.id",
             (plan_id,),
@@ -1487,6 +1519,15 @@ class TidyRepo:
         with self._db.write() as conn:
             conn.execute("UPDATE tidy_plan SET state = ? WHERE id = ?", (state, plan_id))
 
+    def last_share_checks(self, account_id: int) -> dict[str, int]:
+        rows = self._db.connect().execute(
+            "SELECT c.dyn_id, MAX(i.id) FROM tidy_item i JOIN tidy_plan p ON p.id=i.plan_id"
+            " JOIN campaign c ON c.id=i.campaign_id WHERE p.account_id=? AND i.action='drop_share'"
+            " AND i.state != 'pending' GROUP BY c.dyn_id",
+            (account_id,),
+        )
+        return dict(rows)
+
     def cleaned_campaign_ids(self, account_id: int) -> set[int]:
         """已经清理成功过的活动。预演时把它们标成"已清理"，不再重复提议。
 
@@ -1496,7 +1537,7 @@ class TidyRepo:
         rows = self._db.connect().execute(
             "SELECT DISTINCT i.campaign_id FROM tidy_item i"
             " JOIN tidy_plan p ON p.id = i.plan_id"
-            " WHERE p.account_id = ? AND i.state = 'done'",
+            " WHERE p.account_id = ? AND i.state = 'done' AND i.action='drop_share'",
             (account_id,),
         )
         return {int(r["campaign_id"]) for r in rows}

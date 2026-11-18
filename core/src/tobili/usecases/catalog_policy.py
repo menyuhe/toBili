@@ -53,10 +53,17 @@ def choose_deadline(row):
     return None, ""
 
 
-def maintain(db, now, *, discard_pending=False):
-    if not enabled(db):
-        return {"removed": 0, "dates": 0, "labels": 0}
-    counts = {"removed": 0, "dates": 0, "labels": 0}
+def maintain(db, now, *, discard_pending=False, normalize_only=False):
+    curated = enabled(db)
+    counts = {
+        "removed": 0,
+        "dates": 0,
+        "labels": 0,
+        "expired": 0,
+        "with_history": 0,
+        "without_history": 0,
+        "pool_removed": 0,
+    }
     with db.write() as c:
         import json
 
@@ -77,7 +84,13 @@ def maintain(db, now, *, discard_pending=False):
             override = c.execute(
                 "SELECT value FROM deadline_override WHERE campaign_id=?", (cid,)
             ).fetchone()
-            dt, origin = (parse_stamp(override[0]), "manual") if override else choose_deadline(r)
+            dt, origin = (
+                (parse_stamp(override[0]), "manual")
+                if override
+                else (
+                    choose_deadline(r) if curated else (parse_stamp(r["deadline_at"]), "existing")
+                )
+            )
             if dt and (
                 parse_stamp(r["deadline_at"]) != dt
                 or (r.get("candidate_at") and origin != "existing")
@@ -90,24 +103,30 @@ def maintain(db, now, *, discard_pending=False):
                         (cid, origin, stamp(dt)),
                     )
                 counts["dates"] += 1
-            label = concise_reward(r["reward"])
+            label = concise_reward(r["reward"]) if curated else r["reward"]
             if label != r["reward"]:
                 c.execute("UPDATE campaign SET reward=? WHERE id=?", (label, cid))
                 counts["labels"] += 1
+            if normalize_only:
+                continue
             reason = (
                 "已开奖或过期"
                 if r["draw_state"] == "ended" or (dt and dt <= now)
                 else "参与类型不可用"
-                if r["kind"] in ("unknown", "check_in") or r["draw_state"] == "unsupported"
+                if curated
+                and (r["kind"] in ("unknown", "check_in") or r["draw_state"] == "unsupported")
                 else "奖品未识别"
-                if r["reward_status"] == "unknown"
-                or label in ("奖品待补全", "待识别", "未知", "未识别")
-                or (
-                    discard_pending
-                    and (not label or r["reward_status"] not in ("verified", "manual"))
+                if curated
+                and (
+                    r["reward_status"] == "unknown"
+                    or label in ("奖品待补全", "待识别", "未知", "未识别")
+                    or (
+                        discard_pending
+                        and (not label or r["reward_status"] not in ("verified", "manual"))
+                    )
                 )
                 else "资料未核对"
-                if discard_pending and (r["draw_state"] == "unverified" or not dt)
+                if curated and discard_pending and (r["draw_state"] == "unverified" or not dt)
                 else ""
             )
             if reason:
@@ -115,6 +134,14 @@ def maintain(db, now, *, discard_pending=False):
                     "INSERT OR IGNORE INTO catalog_removed VALUES(?,?,?)",
                     (r["dyn_id"], reason, stamp(now)),
                 )
-                c.execute("DELETE FROM pool_item WHERE campaign_id=?", (cid,))
+                counts["pool_removed"] += c.execute(
+                    "DELETE FROM pool_item WHERE campaign_id=?", (cid,)
+                ).rowcount
                 counts["removed"] += 1
+                if reason == "已开奖或过期":
+                    counts["expired"] += 1
+                    history = c.execute(
+                        "SELECT 1 FROM enrollment WHERE campaign_id=? LIMIT 1", (cid,)
+                    ).fetchone()
+                    counts["with_history" if history else "without_history"] += 1
     return counts

@@ -79,8 +79,9 @@ let storageKey=`discovery:${account}:${route.fullPath}`
 function remember(){sessionStorage.setItem(storageKey,JSON.stringify({keyword:keyword.value,kinds:kinds.value,statuses:statuses.value,timeField:timeField.value,after:after.value,before:before.value,order:order.value,page:page.value,missingOnly:missingOnly.value,onlyOpen:onlyOpen.value,officialOnly:officialOnly.value}))}
 function restore(){try{const saved=JSON.parse(sessionStorage.getItem(storageKey)||'{}');for(const [key,target] of Object.entries({keyword,kinds,statuses,timeField,after,before,order,page,missingOnly,onlyOpen,officialOnly})){if(saved[key]!==undefined)target.value=saved[key]}/** 旧会话里存的是 comment 这个单值，合并后它已不是筛选项，折进来免得出现"勾不上却仍在过滤" */kinds.value=(kinds.value||[]).map(k=>k==='comment'?'share,comment':k).filter((k,i,a)=>a.indexOf(k)===i)}catch{}}
 watch(()=>route.fullPath,()=>{remember();storageKey=`discovery:${account}:${route.fullPath}`;page.value=0;selected.value=[];filtersOpen.value=false;searchOpen.value=false;resetFilters();restore();void load()})
-onMounted(()=>{resetFilters();restore();void load();void progress();poll=setInterval(()=>{clockNow.value=Date.now();void progress();if(!busy.value)void load()},30000)})
-onUnmounted(()=>{remember();if(poll)clearInterval(poll)})
+const cloudUpdated=()=>{void load()}
+onMounted(()=>{window.addEventListener('tobili:catalog-refreshed',cloudUpdated);resetFilters();restore();void load();void progress();poll=setInterval(()=>{clockNow.value=Date.now();void progress();if(!busy.value)void load()},30000)})
+onUnmounted(()=>{window.removeEventListener('tobili:catalog-refreshed',cloudUpdated);remember();if(poll)clearInterval(poll)})
 </script>
 <template><div class="campaign-workspace">
 <section class="panel page-heading">

@@ -187,9 +187,12 @@ class Container:
         )
 
     def scan_feeds(self, account_id: int | None = None) -> ScanFeeds:
+        from .runtime.resource_access import require
         from .usecases.scan_model import ScanModel
 
-        llm = self.llm() if self.repos.settings.get(0, "llm.scan", "0") == "1" else None
+        require(self, account_id)
+
+        llm = self.llm(account_id) if self.repos.settings.get(0, "llm.scan", "0") == "1" else None
         return ScanFeeds(
             model=ScanModel(llm, self.db) if llm and llm.ready() else None,
             gateway=self.gateway_for(account_id),
@@ -203,7 +206,7 @@ class Container:
     def manage_feeds(self) -> ManageFeeds:
         return ManageFeeds(self.repos.feeds)
 
-    def llm(self) -> Llm:
+    def llm(self, account_id: int | None = None) -> Llm:
         """按当前设置构造一个大模型客户端。每次调用都重读设置，改完立刻生效。"""
         account = 0
         from .runtime.model_dispatch import ModelDispatch
@@ -213,17 +216,28 @@ class Container:
             api_key=self.vault.read(LLM_KEY) or "",
             model=self.repos.settings.get(account, K_LLM_MODEL, ""),
         )
-        return ModelDispatch(client, self.repos.settings, self._model_gate, self.bus)
+        from .runtime.resource_access import require
+
+        return ModelDispatch(
+            client,
+            self.repos.settings,
+            self._model_gate,
+            self.bus,
+            authorize=lambda: require(self, account_id),
+        )
 
     def text(self, account_id: int | None = None) -> ParticipateText:
         return ParticipateText(
             gateway=self.gateway_for(account_id),
             settings=self.repos.settings,
             vault=self.vault,
-            llm=self.llm(),
+            llm=self.llm(account_id),
         )
 
     def discover(self, account_id: int | None = None) -> DiscoverSources:
+        from .runtime.resource_access import require
+
+        require(self, account_id)
         return DiscoverSources(gateway=self.gateway_for(account_id), feeds=self.manage_feeds())
 
     def batch_enroll(self, account_id: int | None = None) -> BatchEnroll:
@@ -319,6 +333,10 @@ class Container:
                 timer.resume(interval_min=state.interval_min, apply=state.apply)
 
     def scheduled_round(self, owner: int, apply: bool, selection: str) -> dict[str, object]:
+        from .runtime.resource_access import NOTE, allowed
+
+        if not allowed(self, owner):
+            return dict(ok=True, scanned=0, written=0, note=NOTE)
         if not self.has_session(owner):
             raise MissingCredential("本账号没有可用凭据")
         ok = True
@@ -400,12 +418,13 @@ class Container:
             events=self.bus,
         )
 
-    def plan_tidy(self) -> PlanTidy:
+    def plan_tidy(self, *, policy=None) -> PlanTidy:
         return PlanTidy(
             verdicts=self.repos.verdicts,
             tidy=self.repos.tidy,
             clock=self.clock,
             keep=self.repos.keep,
+            policy=policy,
         )
 
     def cleaning_gate(self, account_id: int | None = None) -> CleaningGate:
@@ -416,26 +435,30 @@ class Container:
             clock=self.clock,
         )
 
-    def execute_tidy(self, account_id: int | None = None) -> ExecuteTidy:
+    def execute_tidy(
+        self, account_id: int | None = None, *, protected=None, action_guard=None
+    ) -> ExecuteTidy:
         account_id = self._resolve_account(account_id)
         return ExecuteTidy(
             gateway=self.gateway_for(account_id),
             tidy=self.repos.tidy,
-            journal=self.journal(self.gateway_for(account_id), account_id),
+            journal=self.journal(
+                self.gateway_for(account_id), account_id, action_guard=action_guard
+            ),
             gate=self.cleaning_gate(account_id),
             clock=self.clock,
             quota=self.quota(account_id),
             snapshot=self.snapshot,
-            protected=self.protected,
+            protected=protected or self.protected,
         )
 
-    def protected(self, owner: int, campaign_id: int) -> bool:
+    def protected(self, owner: int, campaign_id: int, *, policy=None) -> bool:
         campaign = self.repos.campaigns.get(campaign_id)
         verdict = self.repos.verdicts.detail(campaign_id, owner)
         if not campaign or not verdict or verdict["outcome"] != "lost":
             return True
         decided = verdict["decided_at"]
-        policy = TidyPolicy()
+        policy = policy or TidyPolicy()
         if not decided or not timedelta(
             hours=policy.grace_hours
         ) <= self.clock.now() - decided <= timedelta(days=policy.freeze_days):
@@ -460,7 +483,7 @@ class Container:
             budget=Budget(per_hour=0, per_day=0, min_gap_seconds=gap),
         )
 
-    def journal(self, gateway=None, owner=None) -> Journal:  # type: ignore[no-untyped-def]
+    def journal(self, gateway=None, owner=None, *, action_guard=None) -> Journal:  # type: ignore[no-untyped-def]
         from .usecases.catalog_controls import guard_action
 
         bound = self._resolve_account(owner) if self._write_scope else owner
@@ -488,7 +511,7 @@ class Container:
             events=self.bus,
             write_scope=fence if self._write_scope else None,
             preflight=self.check_writer,
-            action_guard=lambda cid, action: guard_action(self, cid, action),
+            action_guard=action_guard or (lambda cid, action: guard_action(self, cid, action)),
         )
 
     # ---- 扫码票据 ----
@@ -553,9 +576,14 @@ class Container:
             if profile is None:
                 continue
             ref = self.repos.accounts.credential_ref(account_id)
+            from .runtime.followers import sample
+
+            followers = sample(self, account_id, profile.uid)
             items.append(
                 {
                     "id": account_id,
+                    "follower_count": followers.get("count"),
+                    "followers_at": followers.get("at"),
                     **_profile_dict(profile),
                     "avatar": (
                         f"/api/accounts/{account_id}/avatar?v="

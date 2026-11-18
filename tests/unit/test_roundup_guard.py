@@ -8,7 +8,7 @@ from tobili.runtime.journal import Journal
 from tobili.usecases.batch_enroll import BatchEnroll
 from tobili.usecases.enroll import Enroll
 
-ROUNDUP = """吃瓜Menbro｜精选14个抽奖活动 2026-11-09 开奖
+ROUNDUP = """测试用户｜精选14个抽奖活动 2026-11-09 开奖
 关注我，抽奖不迷路
 本期 14 个活动 · 开奖区间：2026-11-09
 互动抽奖 · 7 个

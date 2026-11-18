@@ -28,6 +28,10 @@ class SourceRefresh:
     def tick(self):
         box = self.box
         for owner in box.repos.accounts.ids():
+            from .resource_access import allowed
+
+            if not allowed(box, owner):
+                continue
             if self.stop.is_set():
                 return
             if (
@@ -48,8 +52,17 @@ class SourceRefresh:
 
     def refresh_one(self, owner):
         box = self.box
+        from .resource_access import allowed
+
+        if not allowed(box, owner):
+            return
         now = time.time()
-        feeds = [f for f in box.repos.feeds.list_for(owner) if f["enabled"]]
+        shared_managed = bool(box.repos.settings.get(0, "tasks.shared.config", ""))
+        feeds = [
+            f
+            for f in box.repos.feeds.list_for(owner)
+            if f["enabled"] and (not shared_managed or f["kind"] not in ("topic", "collection"))
+        ]
         if not feeds:
             return
 

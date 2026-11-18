@@ -90,6 +90,51 @@ class BiliGateway:
     def lottery_notice(self, business_id: str, business_type: int = 1) -> dict | None:
         return self._reader.lottery_notice(business_id, business_type)
 
+    def participation_draw(self, original_id, known=None):
+        """Fetch the official notice for this participation attempt."""
+        from ...domain.errors import TemporaryWriteUnavailable
+        from .official_draw import notice_facts
+
+        kind = known.business_type if known and known.business_type else 1
+        bid = known.business_id if known and known.business_id else original_id
+        if kind == 1 and bid != original_id:
+            raise TemporaryWriteUnavailable("待核验：原动态与抽奖编号不一致")
+        try:
+            notice = self.lottery_notice(bid, kind)
+            if notice is None and known is None:
+                kind = 12
+                notice = self.lottery_notice(bid, kind)
+            facts = notice_facts(notice, bid, kind)
+            if facts and kind == 12 and facts.state != "ended":
+                from dataclasses import replace
+
+                return replace(facts, state="unsupported", reason="充电抽奖需手动参与")
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise TemporaryWriteUnavailable("待核验：官方公告的活动编号或时间无效") from exc
+        if (
+            facts
+            and facts.state == "active"
+            and (facts.deadline is None or notice.get("status") is None)
+        ):
+            raise TemporaryWriteUnavailable("待核验：官方公告缺少状态或开奖时间")
+        if known and not facts:
+            raise TemporaryWriteUnavailable("待核验：未取得本活动的官方公告")
+        return facts
+
+    def follower_count(self, uid):
+        from . import codes, endpoints
+
+        reply = self._transport.fetch(
+            f"{endpoints.API}/x/relation/stat",
+            query={"vmid": uid},
+            referer=f"https://space.bilibili.com/{uid}",
+        )
+        data = codes.ensure_ok(reply, what="读取粉丝数").get("data") or {}
+        count = data.get("follower")
+        if str(data.get("mid")) != uid or type(count) is not int or count < 0:
+            raise ValueError("粉丝数或账号标识无效")
+        return count
+
     def index_draw(self, dyn_id: str):
         """按动态 ID 查官方抽奖索引，不管这条动态有没有渲染出抽奖组件。
 
@@ -125,6 +170,35 @@ class BiliGateway:
     # ---- Prober ----
     def did(self, action: ActionKind, *, dyn_id: str, payload: dict[str, str]) -> ProbeState:
         return self._prober.did(action, dyn_id=dyn_id, payload=payload)
+
+    def unfollow_protection(self, uid: str, expected_mtime: str = "") -> str:
+        """Require two affirmative reads: ordinary following and no group membership."""
+        from . import codes, endpoints
+
+        try:
+            relation = codes.ensure_ok(
+                self._transport.fetch(endpoints.RELATION, query={"fid": uid}), what="读取关注关系"
+            )["data"]
+            if str(relation.get("mid")) != uid or relation.get("attribute") not in (2, 6):
+                return "关注关系未确认"
+            if expected_mtime and str(relation.get("mtime")) != expected_mtime:
+                return "当前关注与参与时的关注记录不一致"
+            if relation.get("special") == 1:
+                return "特别关注"
+            groups = codes.ensure_ok(
+                self._transport.fetch(endpoints.API + "/x/relation/tag/user", query={"fid": uid}),
+                what="读取关注分组",
+            )["data"]
+            if not isinstance(groups, dict) or relation.get("special") != 0:
+                return "关注分组未确认"
+            labels = [str(v) for k, v in groups.items() if k != "0"]
+            if labels:
+                return "位于分组「" + "、".join(labels) + "」"
+            if relation.get("tag") not in (None, [], [0]):
+                return "已加入关注分组"
+            return ""
+        except Exception:
+            return "关注分组暂时无法核实"
 
     def whoami(self) -> str:
         return self._prober.whoami()

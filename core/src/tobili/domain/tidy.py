@@ -206,6 +206,8 @@ def may_delete_share(ref: ShareRef | None, *, me: str, campaign_dyn_id: str) -> 
         return Judgement(False, "在我的动态里没找到这条转发")
     if not ref.dyn_id:
         return Judgement(False, "转发记录缺少动态 ID")
+    if ref.dyn_id == campaign_dyn_id:
+        return Judgement(False, "不能删除活动原动态")
     if not me:
         return Judgement(False, "没有当前账号身份，无法确认归属")
     if ref.author_uid != me:

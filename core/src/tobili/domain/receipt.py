@@ -19,6 +19,8 @@ class Receipt:
     fault: Fault | None = None
     ambiguous: bool = False
 
+    follow_mtime: int = 0
+
     @classmethod
     def success(cls, remote_id: str = "", message: str = "") -> Receipt:
         return cls(True, message=message, remote_id=remote_id)

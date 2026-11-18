@@ -22,7 +22,7 @@ from ..domain.participation import manual_requirement, required_interactions
 from ..ports.bili import Gateway
 from ..ports.collab import Clock, Composer
 from ..ports.repo import CampaignRepo, EnrollmentRepo
-from ..runtime.journal import Journal, Outcome, Step
+from ..runtime.journal import Journal, Outcome, ParticipationExpired, Step
 from ..runtime.quota import Quota
 
 
@@ -130,7 +130,13 @@ class Enroll:
                 detail,
                 draw=DrawFacts(state="unsupported", reason="抽奖汇总文章，请进入所列原动态参与"),
             )
-        if local and stored.get("draw_business_type") in (1, 10, 12) and detail.draw is None:
+        original = self._campaigns.by_dyn(detail.dyn_id) if detail.dyn_id != dyn_id else local
+        original_row = (self._campaigns.get(original[0]) or {}) if original else {}
+        if (
+            original
+            and original_row.get("draw_business_type") in (1, 10, 12)
+            and detail.draw is None
+        ):
             from dataclasses import replace
 
             from ..domain.draw import DrawFacts
@@ -138,12 +144,28 @@ class Enroll:
             detail = replace(
                 detail,
                 draw=DrawFacts(
-                    str(stored.get("draw_business_id") or ""),
-                    int(stored["draw_business_type"]),
+                    str(original_row.get("draw_business_id") or ""),
+                    int(original_row["draw_business_type"]),
                     state="unverified",
                     reason="原官方抽奖组件未能读取，未按普通活动参与",
                 ),
             )
+        verify = getattr(self._gateway, "participation_draw", None)
+        if (
+            not dry_run
+            and verify
+            and (not detail.draw or detail.draw.state not in ("ended", "unsupported"))
+        ):
+            from dataclasses import replace
+
+            from ..domain.draw import DrawFacts
+
+            known = detail.draw
+            if known is None and "互动抽奖" in text:
+                known = DrawFacts(detail.dyn_id, 1)
+            fresh = verify(detail.dyn_id, known)
+            if fresh:
+                detail = replace(detail, draw=fresh, deadline=fresh.deadline)
         if not detail.draw and re.search(
             r"已(?:经)?开奖|开奖公示|(?:获奖|中奖)名单\s*(?:如下|公布|公示|[：:])|抽奖已结束", text
         ):
@@ -192,6 +214,34 @@ class Enroll:
         campaign_id = self._campaigns.upsert(campaign)
         enrollment_id = self._enrollments.create(account_id, campaign_id, now=now)
 
+        now = self._clock.now()
+        if not dry_run and draw and self._events:
+            cn = timezone(timedelta(hours=8))
+            at = (
+                draw.deadline.astimezone(cn).isoformat(timespec="seconds")
+                if draw.deadline
+                else "未知"
+            )
+            status = draw.reason or (
+                "已到开奖时间" if draw.deadline and draw.deadline <= now else "尚未开奖"
+            )
+            message = f"开奖时间 {at} · {status}"
+            if draw.state == "ended" and draw.reason in (
+                "官方已公布获奖名单",
+                "官方抽奖已结束",
+                "正文显示已开奖或公布获奖名单",
+            ):
+                message = f"已开奖，跳过 · 原动态 ID {detail.dyn_id} · 开奖时间 {at}"
+            self._events.publish(
+                "participation.check",
+                dict(
+                    account_id=account_id,
+                    dyn_id=detail.dyn_id,
+                    checked_at=now.astimezone(cn).isoformat(),
+                    title="参与前开奖核验",
+                    message=message,
+                ),
+            )
         if draw and not draw.verified and draw.state != "ended":
             reason = draw.reason or "官方抽奖状态待核实，未参与"
             self._settle(enrollment_id, Stage.BLOCKED, now, reason)
@@ -272,16 +322,31 @@ class Enroll:
                 )
             step_index += 1
             self._step_event(account_id, dyn_id, label, step_index, total_steps)
-            step = (
-                self._journal.inspect(account_id=account_id, campaign_id=campaign_id, action=action)
-                if dry_run
-                else self._journal.attempt(
-                    account_id=account_id,
-                    campaign_id=campaign_id,
-                    action=action,
-                    content=action.payload.get("text", ""),
+            try:
+                step = (
+                    self._journal.inspect(
+                        account_id=account_id, campaign_id=campaign_id, action=action
+                    )
+                    if dry_run
+                    else self._journal.attempt(
+                        account_id=account_id,
+                        campaign_id=campaign_id,
+                        action=action,
+                        deadline=campaign.deadline,
+                        content=action.payload.get("text", ""),
+                    )
                 )
-            )
+            except ParticipationExpired as exc:
+                self._settle(enrollment_id, Stage.BLOCKED, self._clock.now(), str(exc))
+                return EnrollReport(
+                    detail.dyn_id,
+                    campaign_id,
+                    enrollment_id,
+                    Stage.BLOCKED,
+                    tuple(results),
+                    skipped=True,
+                    reason=str(exc),
+                )
             results.append((label, step))
             if action.kind is ActionKind.SHARE:
                 step_index += 1

@@ -44,7 +44,7 @@ class BiliWriter:
             or code in codes.ALREADY_DONE_CODES
             or (action.kind is ActionKind.FAVORITE and code == 75008)
         ):
-            return self._verify_interaction(action)
+            return self._verify_interaction(action, newly_written=code == codes.OK)
         if code == codes.OK:
             if action.kind is ActionKind.SHARE:
                 return self._verify_share(action, _remote_id(payload))
@@ -94,7 +94,7 @@ class BiliWriter:
             ambiguous=True,
         )
 
-    def _verify_interaction(self, action):
+    def _verify_interaction(self, action, *, newly_written):
         from .interaction_state import favorite_state, following_attribute
 
         label = "关注" if action.kind is ActionKind.FOLLOW else "收藏"
@@ -109,7 +109,16 @@ class BiliWriter:
                     ),
                     what="核实关注状态",
                 )
-                state = following_attribute((answer.get("data") or {}).get("attribute"))
+                relation = answer.get("data") or {}
+                state = following_attribute(relation.get("attribute"))
+                if (
+                    newly_written
+                    and state is True
+                    and str(relation.get("mid")) == uid
+                    and type(relation.get("mtime")) is int
+                    and relation["mtime"] > 0
+                ):
+                    return Receipt(True, message="已核实关注成功", follow_mtime=relation["mtime"])
             else:
                 for turn in range(4):
                     state = favorite_state(self._transport, action.dyn_id)

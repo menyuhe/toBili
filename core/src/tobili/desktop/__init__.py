@@ -47,6 +47,12 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["on", "off", "status"],
         help="设置开机自启后退出，不开窗口",
     )
+    parser.add_argument(
+        "--check-closed-draw",
+        nargs=2,
+        metavar=("DYN_ID", "REPORT"),
+        help="匿名只读核验已开奖动态并保存日志",
+    )
     return parser
 
 
@@ -93,6 +99,11 @@ def _complain(message: str) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.check_closed_draw:
+        from .draw_check import verify
+
+        dyn_id, report = args.check_closed_draw
+        return verify(dyn_id, Path(report))
     if args.account_browser is not None:
         from .account_browser import run
 

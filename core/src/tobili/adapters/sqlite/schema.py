@@ -113,6 +113,13 @@ CREATE TABLE IF NOT EXISTS participation_ref (
     result_state TEXT NOT NULL DEFAULT 'unknown',
     PRIMARY KEY(account_id,campaign_id)
 );
+CREATE TABLE IF NOT EXISTS task_follow (
+    account_id INTEGER NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+    up_uid TEXT NOT NULL,
+    campaign_id INTEGER NOT NULL REFERENCES campaign(id) ON DELETE CASCADE,
+    mtime INTEGER NOT NULL,
+    PRIMARY KEY(account_id, up_uid)
+);
 CREATE TABLE IF NOT EXISTS prior_cleanup (
     account_id INTEGER NOT NULL REFERENCES account(id) ON DELETE CASCADE,
     external_id TEXT NOT NULL,

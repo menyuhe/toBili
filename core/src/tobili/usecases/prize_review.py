@@ -68,6 +68,10 @@ def review_status(box):
 
 
 def review_batch(box, *, size=16):
+    from ..runtime.resource_access import allowed
+
+    if not allowed(box):
+        return 0
     from .official_review import pending
 
     # Platform components have structured prizes and draw times, including when no LLM is configured.

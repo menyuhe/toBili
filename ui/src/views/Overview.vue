@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import Icon from '../components/Icon.vue'
-import {extraNav} from '../extensions'
+import {extraNav,overviewActions} from '../extensions'
 
 import { api } from '../api'
 import { refreshAll, state, toast } from '../store'
@@ -79,7 +79,7 @@ async function settle() {
       <section class="panel quick-workspace">
         <div class="quick-heading">
           <div><span class="quick-eyebrow"><Icon name="sparkles" :size="16"/> toBili WORKSPACE</span><h2>常用操作</h2></div>
-          <div class="quick-tools"><button :disabled="!!busy" @click="scan"><Icon name="refresh" :size="16"/>{{busy==='scan'?'扫描中…':'扫描订阅'}}</button><button :disabled="!!busy" @click="settle"><Icon name="gift" :size="16"/>{{busy==='settle'?'核验中…':'核验开奖'}}</button></div>
+          <div class="quick-tools"><button :disabled="!!busy" @click="scan"><Icon name="refresh" :size="16"/>{{busy==='scan'?'扫描中…':'扫描订阅'}}</button><component v-for="(action,index) in overviewActions" :key="index" :is="action"/><button :disabled="!!busy" @click="settle"><Icon name="gift" :size="16"/>{{busy==='settle'?'核验中…':'核验开奖'}}</button></div>
         </div>
         <div class="quick-grid"><RouterLink v-for="item in shortcuts" :key="item.to" :to="item.to" class="quick-link" :style="{'--quick-tone':`var(--${item.tone})`}"><span class="quick-icon"><Icon :name="item.icon" :size="23"/></span><span class="quick-copy"><strong>{{item.label}}</strong><small>{{item.meta}}</small></span><Icon class="quick-arrow" name="arrow" :size="16"/></RouterLink></div>
       </section>

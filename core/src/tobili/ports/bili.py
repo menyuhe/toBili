@@ -96,6 +96,8 @@ class Reader(Protocol):
 
 
 class Prober(Protocol):
+    def unfollow_protection(self, uid: str, expected_mtime: str = "") -> str: ...
+
     def did(self, action: ActionKind, *, dyn_id: str, payload: Mapping[str, str]) -> ProbeState:
         """我是否已经做过这个动作。
 

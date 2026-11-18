@@ -7,6 +7,9 @@ from ..domain.campaign import CampaignKind
 
 
 def refresh(box, account_id, dyn_id):
+    from ..runtime.resource_access import require
+
+    require(box, account_id)
     local = box.repos.campaigns.by_dyn(dyn_id)
     if not local:
         raise ValueError("活动奖品不存在")

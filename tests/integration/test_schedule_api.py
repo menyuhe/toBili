@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -17,6 +19,10 @@ from tobili.ports.models import AccountProfile
 def client(tmp_path):  # type: ignore[no-untyped-def]
     app = create_app(home=str(tmp_path / "home"))
     with TestClient(app) as test_client:
+        # Isolate legacy schedule behavior on an authorized execution device.
+        app.state.container.resource_policy = SimpleNamespace(
+            allowed=lambda owner=None: True, any_owned=lambda: True
+        )
         app.state.container.repos.accounts.upsert(AccountProfile(uid="11", nickname="A"), "a")
         yield test_client
 

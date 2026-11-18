@@ -297,7 +297,14 @@ class ExecuteTidy(EditTidy):
         if action == TidyAction.UNFOLLOW.value:
             return self._unfollow(account_id, item_id, item, apply=apply)
         return self._drop_share(
-            account_id, item_id, campaign_id, dyn_id, up_name, apply=apply, me=me
+            account_id,
+            item_id,
+            campaign_id,
+            dyn_id,
+            up_name,
+            apply=apply,
+            me=me,
+            verified_share=str(item.get("verified_share") or ""),
         )
 
     # ---- 删转发 ----
@@ -311,9 +318,15 @@ class ExecuteTidy(EditTidy):
         *,
         apply: bool,
         me: str,
+        verified_share: str,
     ) -> tuple[ExecLine, bool]:
         try:
-            ref = self._gateway.find_share(dyn_id, pages=self._pages)
+            if verified_share:
+                ref = self._gateway.share_ref(verified_share)
+                if ref.dyn_id != verified_share:
+                    ref = None
+            else:
+                ref = self._gateway.find_share(dyn_id, pages=self._pages)
         except Exception as exc:
             message = f"找我的转发时失败：{exc}"
             self._close_item(item_id, "skipped", message)
@@ -376,6 +389,21 @@ class ExecuteTidy(EditTidy):
             self._close_item(item_id, "skipped", message)
             return ExecLine(item_id, dyn_id, up_name, "unfollow", "skipped", message), False
 
+        payload = {"up_uid": up_uid}
+        try:
+            snapshot = json.loads(str(item.get("snapshot") or "{}"))
+        except ValueError:
+            snapshot = {}
+        if not isinstance(snapshot, dict):
+            snapshot = {}
+        if snapshot.get("follow_mtime"):
+            payload["follow_mtime"] = str(snapshot["follow_mtime"])
+        reason = self._gateway.unfollow_protection(up_uid, payload.get("follow_mtime", ""))
+        if reason:
+            message = "保留关注：" + reason
+            if apply:
+                self._close_item(item_id, "skipped", message)
+            return ExecLine(item_id, dyn_id, up_name, "unfollow", "skipped", message), False
         if not apply:
             return (
                 ExecLine(
@@ -392,12 +420,12 @@ class ExecuteTidy(EditTidy):
         step = self._journal.attempt(
             account_id=account_id,
             campaign_id=campaign_id,
-            action=Action(ActionKind.UNFOLLOW, dyn_id, {"up_uid": up_uid}),
+            action=Action(ActionKind.UNFOLLOW, dyn_id, payload),
         )
         state, message, stop = _translate(step)
         self._close_item(item_id, state, message, target=up_uid)
 
-        if state == "done":
+        if state == "done" and step.wrote:
             # 取关能回滚：重新关注。这条记录必须落库，否则"后悔"就只是一句话。
             self._tidy.record_undo(
                 item_id,
@@ -491,7 +519,7 @@ def _translate(step: Step) -> tuple[str, str, bool]:
         return "done", "此前已经完成", False
     if step.outcome is Outcome.DUPLICATE:
         return "skipped", step.message or "已有记录，未重复执行", False
-    if step.outcome is Outcome.SKIPPED_UNKNOWN:
+    if step.outcome in (Outcome.SKIPPED_UNKNOWN, Outcome.NOT_APPLICABLE):
         return "skipped", step.message or "无法确认状态，已跳过", False
     if step.outcome is Outcome.UNKNOWN:
         return "failed", step.message or "结果未知", True

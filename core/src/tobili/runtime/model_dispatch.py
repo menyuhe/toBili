@@ -9,8 +9,9 @@ from .redact import scrub_text
 
 
 class ModelDispatch:
-    def __init__(self, client, settings, gate, events):
+    def __init__(self, client, settings, gate, events, *, authorize=None):
         self.client, self.settings, self.gate, self.events = client, settings, gate, events
+        self.authorize = authorize
         self.signature = hashlib.sha256(
             json.dumps(dict(client.describe()), sort_keys=True).encode()
         ).hexdigest()
@@ -25,6 +26,8 @@ class ModelDispatch:
         if not self.gate.acquire(timeout=2):
             raise LlmError("模型正在处理其他任务，本次使用本地规则")
         try:
+            if self.authorize:
+                self.authorize()
             health = json.loads(self.settings.get(0, "llm.health", "{}"))
             if (
                 health.get("signature") == self.signature

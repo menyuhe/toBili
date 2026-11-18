@@ -14,6 +14,11 @@ def setup(tmp_path, monkeypatch):
     app = create_app(home=str(tmp_path))
     with TestClient(app) as client:
         box = app.state.container
+        # These scheduler tests exercise an execution device. The private edition
+        # separately tests standby ownership and denial before any task work.
+        box.resource_policy = SimpleNamespace(
+            allowed=lambda owner=None: True, any_owned=lambda: True
+        )
         box.repos.accounts.upsert(AccountProfile(uid="11", nickname="A"), "a")
         box.has_session = lambda owner: True
         box.check_writer = None
@@ -84,9 +89,9 @@ def test_sources_take_over_once_and_readonly_jobs_never_enable_writes(setup):
     box.plan_tidy = lambda: SimpleNamespace(
         run=lambda owner, **kw: seen.append((owner, kw)) or SimpleNamespace(lines=[], clearable=0)
     )
-    # Even a plan saved with apply=True must never delete as part of a cleanup check.
+    # Cleanup is local catalog maintenance, never the remote dynamic tidy workflow.
     out = box.tasks.run(1, "cleanup", body, apply=True)
-    assert out["ok"] and seen == [(1, {"limit": 50, "persist": False})]
+    assert out["ok"] and seen == [] and "账本保留" in out["note"]
     called = []
     box.run_pool = lambda owner: SimpleNamespace(
         run=lambda account, **kw: (
@@ -445,3 +450,98 @@ def test_queue_expired_rows_do_not_consume_live_batch_limit(setup):
     )
     assert result["ok"] and result["written"] == 1 and seen == ["8000"]
     assert box.repos.pool.states(1) == []
+
+
+def test_scheduled_cleanup_only_confirmed_losses_for_owner(setup, gateway):
+    from tobili.domain.campaign import Campaign
+    from tobili.domain.result import OFFICIAL_LOSS
+    from tobili.domain.tidy import Outcome, ShareRef
+
+    client, box = setup
+    me = box.repos.accounts.by_id(1)
+    other = box.repos.accounts.upsert(AccountProfile(uid="22"), "b")
+    gateway.whoami = lambda: me.uid
+    box.gateway_for = lambda owner: gateway
+    box.snapshot = lambda: "test-backup"
+    box._write_scope = None  # The simulated account has no paired directory.
+    now = box.clock.now()
+    for dyn, owner, outcome, evidence in [
+        ("lost", 1, Outcome.LOST, OFFICIAL_LOSS),
+        ("won", 1, Outcome.WON, "中奖"),
+        ("pending", 1, Outcome.PENDING, ""),
+        ("legacy", 1, Outcome.LOST, "文字公告未提及"),
+        ("other", other, Outcome.LOST, OFFICIAL_LOSS),
+    ]:
+        cid = box.repos.campaigns.upsert(Campaign(dyn, "42", dyn))
+        box.repos.verdicts.record(
+            campaign_id=cid, account_id=owner, outcome=outcome, decided_at=now, evidence=evidence
+        )
+    gateway.share = ShareRef("my-repost", me.uid, "lost", now)
+    body = {"account_id": 1, "key": "lost_shares", "apply": False}
+    assert client.post("/api/tasks/once", json=body).json()["written"] == 0
+    assert not gateway.writes
+    result = client.post("/api/tasks/once", json={**body, "apply": True, "confirmed": True}).json()
+    assert result["ok"] and result["written"] == 1, result
+    assert [(a.kind.value, a.dyn_id) for a in gateway.writes] == [("delete_dyn", "my-repost")]
+
+
+@pytest.mark.parametrize("other_outcome", ["won", "pending", "none"])
+def test_task_follow_after_repost_and_read_retry(setup, gateway, other_outcome):
+    from tobili.domain.campaign import Campaign
+    from tobili.domain.result import OFFICIAL_LOSS
+    from tobili.domain.tidy import Outcome, ShareRef
+
+    client, box = setup
+    now = box.clock.now()
+    gateway.whoami = lambda: "11"
+    box.gateway_for = lambda account: gateway
+    box.snapshot = lambda: "test"
+    box._write_scope = None
+    box.repos.settings.put(1, "participation.interval_seconds", "0")
+    cid = box.repos.campaigns.upsert(Campaign("501", "42", "A"))
+    box.repos.verdicts.record(
+        campaign_id=cid, account_id=1, outcome=Outcome.LOST, decided_at=now, evidence=OFFICIAL_LOSS
+    )
+    if other_outcome != "none":
+        other = box.repos.campaigns.upsert(Campaign("502", "42", "B"))
+        box.repos.verdicts.record(
+            campaign_id=other,
+            account_id=1,
+            outcome=Outcome(other_outcome),
+            decided_at=now,
+            evidence="",
+        )
+    with box.db.write() as db:
+        db.execute("INSERT INTO task_follow VALUES(1,'42',?,123)", (cid,))
+    gateway.share = ShareRef("my-share", "11", "501", now)
+    gateway.unfollow_protection = lambda uid, stamp: "关注分组暂时无法核实"
+    body = {"account_id": 1, "key": "lost_shares", "apply": True, "confirmed": True}
+    assert client.post("/api/tasks/once", json=body).json()["ok"]
+    assert [a.kind.value for a in gateway.writes] == ["delete_dyn"]
+    gateway.unfollow_protection = lambda uid, stamp: "" if (uid, stamp) == ("42", "123") else "未知"
+    for _ in range(2):
+        assert client.post("/api/tasks/once", json=body).json()["ok"]
+    expected = ["delete_dyn", "unfollow"] if other_outcome == "none" else ["delete_dyn"]
+    assert [a.kind.value for a in gateway.writes] == expected
+
+
+def test_shared_migration_and_personal_stop(setup):
+    import json
+
+    from tobili.runtime import shared_tasks
+
+    client, box = setup
+    other = box.repos.accounts.upsert(AccountProfile(uid="22"), "b")
+    for account, minutes, due in [(1, 90, 400), (other, 45, 600)]:
+        plan = box.tasks.config(account)
+        plan["running"] = True
+        for t in plan["tasks"]:
+            t["enabled"] = t["key"] == "topics"
+            t["minutes"] = minutes
+        box.repos.settings.put(account, "tasks.config", json.dumps(plan))
+        box.repos.settings.put(account, "tasks.due.topics", str(due))
+    migrated = client.get("/api/tasks/shared").json()
+    assert migrated["tasks"][0] == {"key": "topics", "minutes": 45, "enabled": True}
+    assert migrated["states"]["topics"]["next_at"] == 400
+    box.tasks.pause(1)
+    assert shared_tasks.config(box)["tasks"] == migrated["tasks"]

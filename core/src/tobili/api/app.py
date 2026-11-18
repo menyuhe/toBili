@@ -91,9 +91,16 @@ def create_app(home: str | None = None, *, bundle: str | Path | None = None) -> 
         from ..runtime.prize_worker import PrizeWorker
 
         prize_worker = PrizeWorker(app.state.container)
+        from ..runtime.catalog_worker import CatalogWorker
+        from ..runtime.followers import FollowerWorker
+
+        follower_worker = FollowerWorker(app.state.container)
+        catalog_worker = CatalogWorker(app.state.container)
         try:
             yield
         finally:
+            follower_worker.close()
+            catalog_worker.close()
             prize_worker.close()
             source_refresh.close()
             if background:

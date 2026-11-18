@@ -6,6 +6,7 @@ import time
 
 from ..domain.errors import Fault, MissingCredential, RemoteError, TemporaryWriteUnavailable
 from ..domain.pool import EmptyPool
+from . import shared_tasks
 from .lane import BusyAccount
 from .redact import safe_exception
 from .work_priority import participation_turn, requested
@@ -17,7 +18,8 @@ TASKS = {
     "results": ("开奖核验", (), 60),
     "messages": ("中奖消息", (), 30),
     "participate": ("参与活动", (), 60),
-    "cleanup": ("清理检查", (), 180),
+    "lost_shares": ("清理未中奖转发", (), 30),
+    "cleanup": ("活动库整理", (), 180),
 }
 KEY = "tasks.config"
 
@@ -30,7 +32,13 @@ def source_slot(box, owner, key):
 
 
 def feed_due_at(box, owner, feed):
-    local = float(box.repos.settings.get(owner, f"tasks.feed_due.{feed['id']}", "0"))
+    local = float(
+        box.repos.settings.get(
+            0 if feed["kind"] in ("topic", "collection") else owner,
+            f"tasks.feed_due.{feed['id']}",
+            "0",
+        )
+    )
     if feed["kind"] in ("topic", "collection"):
         return max(float(feed.get("next_scan_at", 0)), local)
     return local
@@ -54,7 +62,10 @@ class TaskBook:
     def config(self, owner):
         raw = self.box.repos.settings.get(owner, KEY, "")
         if raw:
-            return {"hourly_limit": 20, **json.loads(raw)}
+            config = {"hourly_limit": 20, **json.loads(raw)}
+            if not any(task["key"] == "lost_shares" for task in config["tasks"]):
+                config["tasks"].append({"key": "lost_shares", "enabled": False, "minutes": 30})
+            return config
         settings = self.box.repos.settings
         feeds = {f["kind"] for f in self.box.repos.feeds.list_for(owner) if f["enabled"]}
         refresh = settings.get(owner, "sources.refresh", "0") == "1"
@@ -84,7 +95,11 @@ class TaskBook:
         now = time.time()
         if config["running"]:
             for task in config["tasks"]:
-                if task["enabled"] and task["key"] != self.active.get(owner, {}).get("key"):
+                if (
+                    task["enabled"]
+                    and task["key"] not in shared_tasks.COMMON
+                    and task["key"] != self.active.get(owner, {}).get("key")
+                ):
                     at = self.due_at(owner, task["key"])
                     if TASKS[task["key"]][1]:
                         at = max(at, source_slot(self.box, owner, task["key"]))
@@ -93,7 +108,10 @@ class TaskBook:
         upcoming = [{**item, "at": max(now, item["at"])} for item in upcoming]
         if settings.get(owner, "sources.refresh", "0") == "1":
             for feed in self.box.repos.feeds.list_for(owner):
-                if feed["enabled"]:
+                if feed["enabled"] and (
+                    not settings.get(0, shared_tasks.KEY, "")
+                    or feed["kind"] not in ("topic", "collection")
+                ):
                     at = float(settings.get(owner, f"sources.due.{feed['id']}", "0"))
                     upcoming.append(
                         dict(
@@ -163,7 +181,7 @@ class TaskBook:
         ]
 
     def compatible(self, owner, key, config):
-        current = self.config(owner)
+        current = shared_tasks.config(self.box) if key in shared_tasks.FEEDS else self.config(owner)
 
         def task(plan):
             return next((t for t in plan.get("tasks", []) if t["key"] == key), None)
@@ -172,7 +190,7 @@ class TaskBook:
             current["running"]
             and task(current) == task(config)
             and (
-                key != "participate"
+                key not in ("participate", "lost_shares")
                 or all(
                     current.get(k) == config.get(k)
                     for k in ("apply", "selection", "limit", "hourly_limit")
@@ -206,45 +224,76 @@ class TaskBook:
             logging.getLogger(__name__).exception("Task scheduler tick failed")
 
     def tick(self, owner):
+        from .resource_access import allowed
+
+        if not allowed(self.box, owner):
+            return
         if not self.box.has_session(owner) or requested(self.box, owner):
             return
         if float(self.box.repos.settings.get(owner, "tasks.cooldown", "0")) > time.time():
             return
         with self.guard:
             config = self.config(owner)
-            if not config["running"]:
-                return
-            active = [t for t in config["tasks"] if t["enabled"]]
+            common = shared_tasks.config(self.box)
+            active = [
+                t
+                for t in config["tasks"]
+                if config["running"] and t["enabled"] and t["key"] not in shared_tasks.COMMON
+            ]
+            active.extend(
+                t
+                for t in common["tasks"]
+                if t["enabled"] and t["key"] not in (job.get("key") for job in self.active.values())
+            )
             if not active:
                 return
 
             def due(t):
-                at = self.due_at(owner, t["key"])
+                at = self.due_at(0 if t["key"] in shared_tasks.FEEDS else owner, t["key"])
                 return max(at, source_slot(self.box, owner, t["key"])) if TASKS[t["key"]][1] else at
 
             ready = [t for t in active if due(t) <= time.time()]
             if not ready:
                 return
             task = min(ready, key=lambda t: (t["key"] != "participate", due(t)))
+            shared = task["key"] in shared_tasks.FEEDS
+            scope = 0 if shared else owner
+            if shared:
+                config = common
             # Save before IO so an interrupted round cannot repeat immediately on restart.
             self.box.repos.settings.put(
-                owner, f"tasks.due.{task['key']}", str(time.time() + task["minutes"] * 60)
+                scope, f"tasks.due.{task['key']}", str(time.time() + task["minutes"] * 60)
             )
-        result = self.run(owner, task["key"], config, apply=config["apply"], scheduled=True)
+        apply = task["key"] == "lost_shares" or config.get("apply", False)
+        result = self.run(owner, task["key"], config, apply=apply, scheduled=True)
         with self.guard:
             if (
                 self.compatible(owner, task["key"], config)
                 and result.get("note") != "账号正在执行其他任务，稍后再试"
             ):
                 self.box.repos.settings.put(
-                    owner,
+                    scope,
                     f"tasks.due.{task['key']}",
                     str(time.time() + result.get("next_seconds", task["minutes"] * 60)),
                 )
 
     def run(self, owner, key, config, *, apply=False, scheduled=False):
         box = self.box
-        plan_at_start = self.config(owner)
+        from .resource_access import NOTE, allowed
+
+        if not allowed(box, owner):
+            return dict(
+                at=box.clock.now().isoformat(),
+                applied=apply,
+                ok=True,
+                scanned=0,
+                written=0,
+                note=NOTE,
+            )
+        scope = 0 if key in shared_tasks.FEEDS else owner
+        plan_at_start = (
+            shared_tasks.config(box) if key in shared_tasks.FEEDS else self.config(owner)
+        )
         result = {
             "at": box.clock.now().isoformat(),
             "applied": apply,
@@ -336,7 +385,7 @@ class TaskBook:
                                 box.repos.settings.put(
                                     owner, "sources.next_slot", str(time.time() + 300)
                                 )
-                                box.repos.settings.put(owner, due_key, str(time.time() + 300))
+                                box.repos.settings.put(scope, due_key, str(time.time() + 300))
                             self.active[owner] = {
                                 "key": key,
                                 "since": result["at"],
@@ -372,7 +421,7 @@ class TaskBook:
                                         float(fresh.get("next_scan_at", 0)) or due,
                                         source_slot(box, owner, key),
                                     )
-                                box.repos.settings.put(owner, due_key, str(due))
+                                box.repos.settings.put(scope, due_key, str(due))
                                 feed_due.append(due)
                     problems = [p for r in reports for p in r.problems]
                     result.update(
@@ -524,14 +573,32 @@ class TaskBook:
                         scanned=len(r.items),
                         note="；".join(r.problems) or f"读取 {len(r.items)} 条消息，请到消息页查看",
                     )
+                elif key == "lost_shares":
+                    from ..usecases.scheduled_tidy import clean_lost_shares
+
+                    result.update(
+                        clean_lost_shares(
+                            box,
+                            owner,
+                            apply=apply,
+                            active=lambda: (
+                                not self.stop.is_set()
+                                and (not scheduled or self.compatible(owner, key, config))
+                            ),
+                        )
+                    )
                 elif key == "cleanup":
-                    r = box.plan_tidy().run(owner, limit=50, persist=False)
-                    result.update(scanned=len(r.lines), note=f"可清理 {r.clearable} 条")
+                    from .catalog_worker import run
+
+                    r = run(box, force=True)
+                    result.update(
+                        ok=r["ok"], scanned=r.get("removed", 0), note=r["note"], cleanup=r
+                    )
         except EmptyPool:
             result.update(ok=True, note="暂无待参与活动，按原排期等待新活动")
         except BusyAccount:
             result.update(ok=False, note="账号正在执行其他任务，稍后再试")
-            box.repos.settings.put(owner, f"tasks.due.{key}", str(time.time() + 60))
+            box.repos.settings.put(scope, f"tasks.due.{key}", str(time.time() + 60))
         except TemporaryWriteUnavailable as exc:
             result.update(
                 ok=False,
@@ -596,19 +663,19 @@ class TaskBook:
                     result["note"] += "；真实参与已停用，处理问题后重新勾选并保存"
             retry_key = f"tasks.retry.{key}"
             if result.get("retrying") and self.compatible(owner, key, plan_at_start):
-                box.repos.settings.put(owner, retry_key, str(time.time() + result["next_seconds"]))
+                box.repos.settings.put(scope, retry_key, str(time.time() + result["next_seconds"]))
             elif result["ok"] and (key != "participate" or apply):
-                if float(box.repos.settings.get(owner, retry_key, "0")) and self.compatible(
+                if float(box.repos.settings.get(scope, retry_key, "0")) and self.compatible(
                     owner, key, plan_at_start
                 ):
                     minutes = next(t["minutes"] for t in plan_at_start["tasks"] if t["key"] == key)
                     box.repos.settings.put(
                         owner, f"tasks.due.{key}", str(time.time() + minutes * 60)
                     )
-                box.repos.settings.put(owner, retry_key, "0")
+                box.repos.settings.put(scope, retry_key, "0")
             history_key = f"tasks.history.{key}"
-            history = json.loads(box.repos.settings.get(owner, history_key, "[]"))
-            box.repos.settings.put(owner, history_key, json.dumps([result, *history][:20]))
+            history = json.loads(box.repos.settings.get(scope, history_key, "[]"))
+            box.repos.settings.put(scope, history_key, json.dumps([result, *history][:20]))
         box.bus.publish(
             "schedule.round",
             {

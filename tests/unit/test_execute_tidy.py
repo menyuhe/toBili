@@ -549,3 +549,14 @@ def test_without_a_snapshot_hook_nothing_changes(
     executor = _executor(repos, gateway, clock)
     executor.confirm(plan_id)
     assert executor.run(plan_id, apply=True).snapshot == ""
+
+
+def test_group_added_between_preview_and_send(repos, gateway, clock, account):
+    plan = _plan(repos, account, action="unfollow")
+    executor = _executor(repos, gateway, clock)
+    executor.confirm(plan)
+    answers = iter(["", "位于分组「良心up」"])
+    gateway.unfollow_protection = lambda *args: next(answers)
+    result = executor.run(plan, apply=True)
+    assert result.skipped == 1 and "良心up" in result.lines[0].message
+    assert not gateway.writes

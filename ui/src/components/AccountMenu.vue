@@ -101,7 +101,7 @@ onUnmounted(() => document.removeEventListener('click', close))
     <button class="account-btn" :title="`当前账号：${current?.nickname ?? ''}`" @click.stop="toggle">
       <div class="text-right leading-tight hidden sm:block">
         <div class="text-[13.5px] font-medium">{{ current?.nickname }}</div>
-        <div class="text-[11.5px] muted">Lv.{{ current?.level }}</div>
+        <div class="text-[11.5px] muted whitespace-nowrap" :title="current?.followers_at ? '粉丝数更新于 ' + new Date(current.followers_at * 1000).toLocaleString() : '等待粉丝数更新'">Lv.{{ current?.level }} · 粉丝 {{ current?.follower_count?.toLocaleString('zh-CN') ?? '—' }}</div>
       </div>
       <AccountAvatar :src="avatarUrl" :name="current?.nickname || '?'" />
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" class="flex-none muted">

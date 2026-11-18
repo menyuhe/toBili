@@ -71,6 +71,8 @@ export interface Overview {
 }
 
 export interface AccountRow extends Profile {
+  follower_count?: number | null
+  followers_at?: number | null
   id: number
   current: boolean
   ready: boolean

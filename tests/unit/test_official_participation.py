@@ -31,7 +31,7 @@ def notice(bid="123", kind=1, **kw):
     )
 
 
-def usecase(repos, gateway, clock):
+def usecase(repos, gateway, clock, *, events=None):
     return Enroll(
         gateway=gateway,
         campaigns=repos.campaigns,
@@ -39,6 +39,7 @@ def usecase(repos, gateway, clock):
         journal=Journal(gateway=gateway, intents=repos.intents, clock=clock),
         clock=clock,
         standard_actions=True,
+        events=events,
     )
 
 
@@ -350,3 +351,52 @@ def test_actual_lottery_rich_node_reads_notice():
             return {"code": 0, "data": notice()}
 
     assert read_draw(Wire(), item).business_type == 1
+
+
+def test_repost_checks_original_again_even_when_list_says_open(repos, gateway, clock, account_id):
+    from tobili.runtime.events import EventBus
+
+    original = "1000000000000000123"
+    repost = "1000000000000000456"
+    cached = notice_facts(notice(original), original, 1)
+    repos.campaigns.upsert(Campaign(original, "2002", "活动", K.SHARE, draw=cached))
+    detail = replace(gateway.detail(original), draw=cached)
+    gateway.detail = lambda _: detail
+    checked = []
+
+    def fresh(dyn, known):
+        checked.append((dyn, known.business_id))
+        return notice_facts({**notice(original), "status": 2, "lottery_time": 1794933180}, dyn, 1)
+
+    gateway.participation_draw = fresh
+    events = EventBus()
+    result = usecase(repos, gateway, clock, events=events).run(account_id, repost)
+    assert checked == [(original, original)]
+    assert result.skipped and not gateway.writes
+    assert [e.payload["message"] for e in events.since(0) if e.topic == "participation.check"] == [
+        f"已开奖，跳过 · 原动态 ID {original} · 开奖时间 2026-11-18T00:33:00+08:00"
+    ]
+
+
+def test_probe_crossing_deadline_stops_before_first_write(repos, gateway, clock, account_id):
+    from tobili.domain.action import Action, ActionKind
+    from tobili.domain.probe import ProbeState
+    from tobili.runtime.journal import ParticipationExpired
+
+    cid = repos.campaigns.upsert(Campaign("123", "42", "活动", K.SHARE))
+    deadline = clock.now() + timedelta(seconds=1)
+
+    def slow_probe(*args, **kwargs):
+        clock.advance(seconds=1)
+        return ProbeState.ABSENT
+
+    gateway.did = slow_probe
+    journal = Journal(gateway=gateway, intents=repos.intents, clock=clock)
+    with pytest.raises(ParticipationExpired):
+        journal.attempt(
+            account_id=account_id,
+            campaign_id=cid,
+            action=Action(ActionKind.SHARE, "123", {}),
+            deadline=deadline,
+        )
+    assert not gateway.writes and not repos.intents.unresolved(account_id)

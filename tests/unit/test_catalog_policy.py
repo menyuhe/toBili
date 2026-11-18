@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import UTC, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -173,3 +173,27 @@ def test_topic_seven_day_window_stops_old_pages(repos, clock, account_id, gatewa
     assert not report.problems, report.problems
     assert len(calls) == 2
     assert repos.campaigns.by_dyn("1") and not repos.campaigns.by_dyn("2")
+
+
+def test_normalize_without_early_cleanup_at_beijing_boundary(repos, clock):
+    from datetime import datetime
+
+    from tobili.usecases.catalog_policy import CN
+
+    cid = repos.campaigns.upsert(
+        Campaign(
+            dyn_id="boundary",
+            up_uid="2",
+            title="奖",
+            kind=CampaignKind.SHARE,
+            reward="鼠标",
+            deadline=datetime(2026, 11, 17, tzinfo=CN),
+        )
+    )
+    repos.settings.put(0, "catalog.curated", "1")
+    now = datetime(2026, 11, 16, 16, tzinfo=UTC)
+    assert maintain(repos.db, now - timedelta(seconds=1))["expired"] == 0
+    assert maintain(repos.db, now, normalize_only=True)["expired"] == 0
+    assert not repos.campaigns.removed("boundary")
+    assert maintain(repos.db, now)["expired"] == 1
+    assert repos.campaigns.get(cid)

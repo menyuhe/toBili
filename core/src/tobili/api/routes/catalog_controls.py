@@ -8,6 +8,39 @@ from ..deps import get_container
 router = APIRouter(prefix="/api", tags=["catalog-controls"])
 
 
+class CleanupSettings(BaseModel):
+    enabled: bool | None = None
+    minutes: int = Field(ge=5, le=10080)
+
+
+@router.get("/catalog-cleanup")
+def cleanup_status(box: Container = Depends(get_container)):
+    from ...runtime.catalog_worker import view
+
+    return view(box)
+
+
+@router.put("/catalog-cleanup")
+def cleanup_settings(body: CleanupSettings, box: Container = Depends(get_container)):
+    from ...runtime.catalog_worker import LOCK, PREFIX, view
+
+    with LOCK:
+        if body.enabled is not None:
+            box.repos.settings.put(0, PREFIX + "enabled", "1" if body.enabled else "0")
+        box.repos.settings.put(0, PREFIX + "minutes", str(body.minutes))
+        box.repos.settings.put(
+            0, PREFIX + "next", str(box.clock.now().timestamp() + body.minutes * 60)
+        )
+    return view(box)
+
+
+@router.post("/catalog-cleanup")
+def cleanup_once(box: Container = Depends(get_container)):
+    from ...runtime.catalog_worker import run
+
+    return run(box, force=True)
+
+
 class DeadlineEdit(BaseModel):
     value: str
     expected: str | None = None

@@ -50,6 +50,10 @@ class Step:
         return self.receipt is not None
 
 
+class ParticipationExpired(Exception):
+    pass
+
+
 class Journal:
     def __init__(
         self,
@@ -78,6 +82,7 @@ class Journal:
         action: Action,
         content: str = "",
         probe_payload: Mapping[str, str] | None = None,
+        deadline=None,
     ) -> Step:
         with self._write_scope(account_id) if self._write_scope else nullcontext():
             return self._attempt(
@@ -86,6 +91,7 @@ class Journal:
                 action=action,
                 content=content,
                 probe_payload=probe_payload,
+                deadline=deadline,
             )
 
     def _attempt(
@@ -96,6 +102,7 @@ class Journal:
         action: Action,
         content: str = "",
         probe_payload: Mapping[str, str] | None = None,
+        deadline=None,
     ) -> Step:
         now = self._clock.now()
         if self.action_guard:
@@ -122,6 +129,14 @@ class Journal:
 
         if self.action_guard:
             self.action_guard(campaign_id, action)
+        if action.kind is ActionKind.UNFOLLOW:
+            reason = self._gateway.unfollow_protection(
+                action.payload.get("up_uid", ""), action.payload.get("follow_mtime", "")
+            )
+            if reason:
+                return Step(Outcome.NOT_APPLICABLE, probe, "保留关注：" + reason)
+        if deadline and self._clock.now() >= deadline:
+            raise ParticipationExpired("执行期间已到截止时间，后续动作未发送")
         intent_id, created = self._intents.reserve(
             account_id=account_id,
             campaign_id=campaign_id,
@@ -152,6 +167,18 @@ class Journal:
             fault=receipt.fault.value if receipt.fault else "",
             message=receipt.message,
             now=self._clock.now(),
+            **(
+                {
+                    "follow_uid": action.payload.get("up_uid") or action.payload.get("fid"),
+                    "follow_mtime": receipt.follow_mtime,
+                }
+                if receipt.ok
+                and receipt.follow_mtime
+                and action.kind is ActionKind.FOLLOW
+                and action.dyn_id
+                and campaign_id
+                else {}
+            ),
         )
         self._emit(
             "write",
