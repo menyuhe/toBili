@@ -5,7 +5,7 @@ import { registerWorkGuard } from '../workGuard'
 import { req } from '../api'
 import Countdown from '../components/Countdown.vue'
 import { state,toast,refreshQueue } from '../store'
-const props=defineProps<{embedded?:boolean}>()
+const props=defineProps<{embedded?:boolean;sharedOnly?:boolean}>()
 const emit=defineEmits<{navigate:[]}>()
 const router=useRouter()
 function navigate(key:Key){if(props.embedded&&!mayLeave())return;emit('navigate');void router.push(choices[key].link)}
@@ -20,7 +20,7 @@ const choices:Record<Key,{name:string;note:string;tone:string;link:string}>={
  results:{name:'开奖核验',note:'核对已参与活动，保存开奖结论',tone:'amber',link:'/results'},
  messages:{name:'中奖消息',note:'读取私信、回复和 @，不标记为已看',tone:'purple',link:'/inbox'},
  participate:{name:'参与活动',note:'按所选范围和每轮上限执行',tone:'teal',link:'/pool'},
- lost_shares:{name:'清理未中奖转发',note:'确认未中奖后删除本人的转发。参与时新增的关注仅在相关活动均已确认未中奖后清理；已分组、特别关注及待核实的关注均保留。',tone:'amber',link:'/tidy'},
+ lost_shares:{name:'清理未中奖转发',note:'只删本人未中奖转发。已分组、特别关注的 UP 主保留。',tone:'amber',link:'/tidy'},
  cleanup:{name:'活动库整理',note:'移除过期目录和队列项，保留参与账本',tone:'amber',link:'/tidy'},
 }
 const view=ref<Plan|null>(null),form=ref<Plan|null>(null),busy=ref(''),dirty=ref(false),error=ref('')
@@ -28,7 +28,7 @@ const account=computed(()=>state.overview?.accounts.find(x=>x.current))
 const running=computed(()=>view.value?.running||view.value?.legacy_running)
 const commonKeys:Key[]=['topics','collections','cleanup']
 const personal=computed(()=>form.value?.tasks.filter(t=>!commonKeys.includes(t.key))||[])
-type Shared={tasks:Period[];states:Partial<Record<Key,{next_at:number;latest:Run|null}>>}
+type Shared={tasks:Period[];states:Partial<Record<Key,{next_at:number;check_at:number;status:string;latest:Run|null}>>}
 const shared=ref<Shared|null>(null),sharedDirty=ref(false),sharedBusy=ref(false)
 async function loadShared(){try{const data=await req<Shared>('/api/tasks/shared');if(!sharedDirty.value&&!sharedBusy.value)shared.value=data}catch(e){error.value=String(e)}}
 async function saveShared(){if(!shared.value)return;sharedBusy.value=true;try{shared.value=await req<Shared>('/api/tasks/shared',{method:'PUT',body:JSON.stringify({tasks:shared.value.tasks})});sharedDirty.value=false;toast('通用排期已保存','ok')}catch(e){toast(String(e),'danger')}finally{sharedBusy.value=false}}
@@ -67,29 +67,36 @@ function mayLeave(){return (!dirty.value&&!cleanupDirty.value&&!sharedDirty.valu
 const removeGuard=registerWorkGuard(mayLeave)
 if(!props.embedded)onBeforeRouteLeave(mayLeave)
 defineExpose({mayLeave})
-onMounted(()=>{void load(true);void loadCleanup();void loadShared();poll=setInterval(()=>{void load();void loadCleanup();void loadShared()},3000)})
+function refreshPanel(initial=false){
+ if(props.sharedOnly){void loadShared();void loadCleanup()}else void load(initial)
+}
+function clockTime(at?:number){return at?new Date(at*1000).toLocaleTimeString('zh-CN',{hour12:false}):''}
+onMounted(()=>{refreshPanel(true);poll=setInterval(()=>refreshPanel(),3000)})
 onUnmounted(()=>{removeGuard();if(poll)clearInterval(poll)})
 </script>
 <template>
  <div class="task-workspace" :class="{embedded:embedded}">
+  <p v-if="error" class="warning" role="alert">{{error}}</p>
+  <template v-if="sharedOnly">
   <section class="panel task-heading"><div><h2>通用任务</h2><p class="dim">所有账号共用一份来源更新排期</p></div><button :disabled="!sharedDirty||sharedBusy" @click="saveShared">保存通用排期</button></section>
   <div v-if="shared" class="task-grid">
    <section v-for="task in shared.tasks" :key="task.key" class="panel task-card">
     <div class="task-card-head"><label><input type="checkbox" v-model="task.enabled" :disabled="sharedBusy" @change="sharedDirty=true"/><strong>{{choices[task.key].name}}</strong></label><button class="task-link" @click="navigate(task.key)">查看</button></div>
     <div class="task-period"><label>每 <input class="ipt" type="number" min="30" max="10080" v-model.number="task.minutes" :disabled="sharedBusy" @input="sharedDirty=true"/> 分钟</label><button :disabled="sharedBusy" @click="sharedOnce(task)">运行一次</button></div>
-    <div class="task-status"><span v-if="sharedDirty">修改待保存</span><template v-else-if="task.enabled">下次：<Countdown :at="Number(shared.states[task.key]?.next_at)"/></template><span v-else>未启用</span><p v-if="shared.states[task.key]?.latest">{{shared.states[task.key]?.latest?.note}}</p></div>
+    <div class="task-status"><span v-if="sharedDirty">修改待保存</span><template v-else-if="task.enabled"><template v-if="shared.states[task.key]?.status">{{shared.states[task.key]?.status}}<template v-if="shared.states[task.key]?.status?.includes('调度')||shared.states[task.key]?.status?.includes('其他任务')"> · {{clockTime(shared.states[task.key]?.check_at)}} 复查</template></template><template v-else>下次 {{clockTime(shared.states[task.key]?.next_at)}} · <Countdown :at="Number(shared.states[task.key]?.next_at)"/></template></template><span v-else>未启用</span><p v-if="shared.states[task.key]?.latest">{{shared.states[task.key]?.latest?.note}}</p></div>
    </section>
   </div>
   <section class="panel task-card" v-if="cleanup">
    <div class="task-card-head"><label><input type="checkbox" v-model="cleanupEnabled" :disabled="cleanupBusy" @change="cleanupDirty=true"/><strong>本机活动库整理</strong></label></div>
-   <p class="task-note">按间隔移出已截止的已参与、未参与活动，保留防重复参与与开奖结果记录。程序运行时独立执行，云端同步设备也会整理本地资料。不会删除 B 站动态或取关。</p>
+   <p class="task-note">移出已截止活动，保留参与和开奖记录。</p>
    <div class="task-period"><label>每 <input class="ipt" type="number" min="5" max="10080" v-model.number="cleanupMinutes" :disabled="cleanupBusy" @input="cleanupDirty=true"/> 分钟</label><div class="toolbar"><button :disabled="cleanupBusy||!cleanupDirty" @click="saveCleanup">保存整理设置</button><button :disabled="cleanupBusy" @click="cleanNow">{{cleanupBusy?'处理中…':'立即整理'}}</button></div></div>
    <div class="task-status">下次：<Countdown v-if="cleanup.enabled" :at="cleanup.next_at"/><span v-else>未启用</span><p v-if="cleanup.latest" :class="{warning:!cleanup.latest.ok}">{{new Date(cleanup.latest.at).toLocaleString('zh-CN')}} · {{cleanup.latest.note}}</p></div>
   </section>
+  </template>
+  <template v-else>
   <section class="panel task-heading"><div><h2>个人任务 <span class="chip" :class="running?'chip-ok':''">{{running?'运行中':'已停止'}}</span></h2><p class="dim">{{account?.nickname}} · 已选 {{enabled}} 项功能<span v-if="dirty" class="warning"> · 修改后请保存生效</span></p></div><div class="toolbar"><button :disabled="!!busy" @click="save(!!view?.running)">保存个人设置</button><button v-if="running" class="danger" :disabled="!!busy" @click="stop">停止本账号任务</button><button v-else class="primary" :disabled="!!busy||!enabled" @click="save(true)">启动所选任务</button></div></section>
   <div v-if="view?.next_scheduled" class="task-countdown">下次：{{view.next_scheduled.label}}<Countdown :at="view.next_scheduled.at"/></div>
   <p v-if="view?.active.key" class="task-notice" role="status">正在执行 {{choices[view.active.key].name}} · {{view.active.note}}<span v-if="!running"> · 本条完成后停止</span></p>
-  <p v-if="error" class="warning" role="alert">{{error}}</p>
   <p v-if="view?.legacy_running" class="task-notice">原参与排期仍在运行，停止后可使用新的功能组合。</p>
   <p v-else-if="view?.sources_running&&!running" class="task-notice">订阅源的自动更新仍在运行。启动这里的来源任务后会接管更新，避免重复扫描。</p>
   <details class="panel task-presets"><summary>个人任务快捷配置</summary><div class="toolbar"><button :disabled="!!busy" @click="preset('read')">日常更新与检查</button><button :disabled="!!busy" @click="preset('queue')">仅计划单参与</button><button :disabled="!!busy" @click="preset('catalog')">奖品库自动参与</button></div></details>
@@ -104,6 +111,7 @@ onUnmounted(()=>{removeGuard();if(poll)clearInterval(poll)})
    </section>
   </div>
   <details class="panel task-history"><summary>最近运行 · {{histories.length}} 条</summary><div class="table-scroll"><table class="dense w-full" v-if="histories.length"><thead><tr><th>时间</th><th>功能</th><th>结果</th><th>说明</th></tr></thead><tbody><tr v-for="(run,i) in histories" :key="i"><td>{{new Date(run.at).toLocaleString('zh-CN')}}</td><td>{{choices[run.key].name}}</td><td><span class="chip" :class="run.ok?'chip-ok':'chip-warn'">{{run.ok?'完成':'未完成'}}</span></td><td class="run-note">{{run.note}}</td></tr></tbody></table><p v-else class="empty-state">暂无运行记录</p></div></details>
+  </template>
  </div>
 </template>
 <style scoped>
@@ -133,4 +141,5 @@ onUnmounted(()=>{removeGuard();if(poll)clearInterval(poll)})
 .task-presets summary{padding:16px 22px}.task-presets .toolbar{padding:0 22px 18px}
 .task-notice{padding:14px 20px;background:var(--accent-soft);border-left:3px solid var(--accent);font-size:var(--text-control)}
 @media(max-width:1000px){.participation-card .participation-options{grid-template-columns:repeat(2,minmax(0,1fr))}.task-grid{grid-template-columns:1fr}}
+.participation-options{align-items:start}.participation-options label.field{display:grid;grid-template-rows:auto var(--control-height,36px);align-content:start;gap:6px;min-width:0}.participation-options .field>.ipt{box-sizing:border-box;display:block;width:100%;height:var(--control-height,36px);margin:0;line-height:normal;font:inherit}.participation-options select.ipt{appearance:none;padding-right:24px;background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-size:4px 4px;background-repeat:no-repeat;background-position:calc(100% - 13px) 50%,calc(100% - 9px) 50%}
 </style>

@@ -133,20 +133,51 @@ class SharedConfig(BaseModel):
 @router.get("/shared")
 def shared_view(box: Container = Depends(get_container)):
     import json
+    import time
+
+    from ...runtime.resource_access import allowed
+    from ...runtime.taskbook import source_slot
+    from ...runtime.work_priority import requested
 
     config = shared_tasks.config(box)
-    return {
-        **config,
-        "states": {
-            key: {
-                "next_at": box.tasks.due_at(0, key),
-                "latest": next(
-                    iter(json.loads(box.repos.settings.get(0, "tasks.history." + key, "[]"))), None
+    owned = [a for a in box.repos.accounts.ids() if allowed(box, a)]
+    sessions = [a for a in owned if box.has_session(a)]
+    states = {}
+    for key in shared_tasks.FEEDS:
+        due = box.tasks.due_at(0, key)
+        now = time.time()
+        ready = [a for a in sessions if not requested(box, a) and box.lanes.is_free(a)]
+        status = ""
+        if any(job.get("key") == key for job in list(box.tasks.active.values())):
+            status = "正在更新"
+        elif not owned:
+            status = "本机无执行账号"
+        elif not sessions:
+            status = "等待账号登录"
+        elif not ready:
+            status = "账号正在处理其他任务"
+        if ready:
+            due = max(
+                due,
+                min(
+                    max(
+                        source_slot(box, a, key),
+                        float(box.repos.settings.get(a, "tasks.cooldown", "0")),
+                    )
+                    for a in ready
                 ),
-            }
-            for key in shared_tasks.FEEDS
-        },
-    }
+            )
+        if not status and due <= now:
+            status = "已到期，下一轮调度检查"
+        states[key] = dict(
+            next_at=due,
+            status=status,
+            check_at=box.tasks.next_tick_at,
+            latest=next(
+                iter(json.loads(box.repos.settings.get(0, "tasks.history." + key, "[]"))), None
+            ),
+        )
+    return {**config, "states": states}
 
 
 @router.put("/shared")

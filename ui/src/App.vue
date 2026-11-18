@@ -48,7 +48,7 @@ const groups = computed(() => [
   /* 消息不再单独占一个页签：它是"哪个账号有新消息"，属于挂机运作的上下文。
      仍然留在 items 里（hidden），这样停在 /inbox 时侧栏高亮还是「挂机运作」，
      但页签条里不会多出一个入口。 */
-  {label:'挂机运作',color:'var(--accent)',items:[{to:'/standby',label:'挂机运作',hidden:false},{to:'/inbox',label:'消息',hidden:true}]},
+  {label:'挂机运作',color:'var(--accent)',items:[{to:'/standby',label:'挂机运作',hidden:false},{to:'/auto',label:'个人任务',hidden:true},{to:'/inbox',label:'消息',hidden:true}]},
   {label:'活动中心',color:'var(--discover)',items:[{to:'/campaigns',label:'发现奖品',hidden:false},{to:'/pool',label:'待参与',hidden:false},{to:'/sources',label:'订阅源',hidden:false},{to:'/shelf',label:'往期架',hidden:false},{to:'/cleaned',label:'已清理',hidden:false}]},
   {label:'获奖校验',color:'var(--warn)',items:[{to:'/results',label:'开奖核验',hidden:false},{to:'/tidy',label:'清理',hidden:false}]},
   ...extraNav.filter(x=>x.to!='/exchange').map(x=>({label:x.label,color:'var(--editor)',items:[{...x,hidden:false}]})),

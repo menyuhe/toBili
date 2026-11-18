@@ -171,6 +171,16 @@ class BiliGateway:
     def did(self, action: ActionKind, *, dyn_id: str, payload: dict[str, str]) -> ProbeState:
         return self._prober.did(action, dyn_id=dyn_id, payload=payload)
 
+    def follow_groups(self):
+        from . import codes, endpoints
+
+        data = codes.ensure_ok(
+            self._transport.fetch(endpoints.API + "/x/relation/tags"), what="读取关注分组"
+        ).get("data")
+        if not isinstance(data, list):
+            raise ValueError("分组列表未核实")
+        return [dict(id=int(g["tagid"]), name=str(g["name"]), count=int(g["count"])) for g in data]
+
     def unfollow_protection(self, uid: str, expected_mtime: str = "") -> str:
         """Require two affirmative reads: ordinary following and no group membership."""
         from . import codes, endpoints

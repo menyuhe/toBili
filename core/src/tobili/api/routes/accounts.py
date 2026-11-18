@@ -11,7 +11,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel
 
 from ...container import Container
@@ -35,6 +35,29 @@ def check_login(account_id: int, body: HealthIn, box: Container = Depends(get_co
     if account_id not in box.repos.accounts.ids():
         raise HTTPException(404, "账号不存在")
     return box.account_health.request(account_id, force=body.force)
+
+
+@router.get("/{account_id}/follow-groups")
+def follow_groups(
+    account_id: int,
+    uid: str = Query("", pattern=r"^([1-9][0-9]{0,19})?$"),
+    box: Container = Depends(get_container),
+):
+    profile = box.repos.accounts.by_id(account_id)
+    if not profile:
+        raise HTTPException(404, "账号不存在")
+    try:
+        gateway = box.gateway_for(account_id)
+        if gateway.whoami() != profile.uid:
+            raise HTTPException(409, "登录身份与所选账号不符，请重新检查登录")
+        if uid:
+            protection = gateway.unfollow_protection(uid)
+            return {"uid": uid, "result": protection or "已关注，未加入分组"}
+        return {"groups": gateway.follow_groups()}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(503, "暂时无法核实关注分组，请稍后重试") from exc
 
 
 @router.get("/{account_id}/avatar")

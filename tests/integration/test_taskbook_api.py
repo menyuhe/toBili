@@ -545,3 +545,32 @@ def test_shared_migration_and_personal_stop(setup):
     assert migrated["states"]["topics"]["next_at"] == 400
     box.tasks.pause(1)
     assert shared_tasks.config(box)["tasks"] == migrated["tasks"]
+
+
+def test_group_lookup_stays_with_card_account(setup, gateway):
+    client, box = setup
+    other = box.repos.accounts.upsert(AccountProfile(uid="22"), "b")
+    gateway.whoami = lambda: "22"
+    gateway.follow_groups = lambda: [{"id": 8, "name": "良心up", "count": 3}]
+    gateway.unfollow_protection = lambda uid: "位于分组「良心up」"
+    box.gateway_for = lambda owner: gateway
+    endpoint = f"/api/accounts/{other}/follow-groups"
+    assert client.get(endpoint).json()["groups"][0]["count"] == 3
+    assert "良心up" in client.get(endpoint, params={"uid": "123"}).json()["result"]
+    assert client.get("/api/accounts/1/follow-groups").status_code == 409
+    assert client.get(endpoint, params={"uid": "abc"}).status_code == 422
+    assert not gateway.writes
+
+
+def test_shared_status_explains_slot_and_standby(setup):
+    import time
+
+    from tobili.runtime import shared_tasks
+
+    client, box = setup
+    shared_tasks.config(box)
+    slot = time.time() + 300
+    box.repos.settings.put(0, "sources.shared.next_slot", str(slot))
+    assert client.get("/api/tasks/shared").json()["states"]["collections"]["next_at"] == slot
+    box.resource_policy.allowed = lambda owner: False
+    assert client.get("/api/tasks/shared").json()["states"]["topics"]["status"] == "本机无执行账号"

@@ -8,6 +8,9 @@ import Countdown from '../components/Countdown.vue'
 import Icon from '../components/Icon.vue'
 import AccountAvatar from '../components/AccountAvatar.vue'
 import AccountStatus from '../components/AccountStatus.vue'
+import Auto from './Auto.vue'
+import FollowGroups from '../components/FollowGroups.vue'
+const groupAccount=ref<Item|null>(null)
 import QrLogin from '../components/QrLogin.vue'
 type Item=AccountRow&{active:{label?:string;note?:string;since?:string};next?:{label:string;at:number};running:boolean;enabled:string[];pending:number;hourly_used:number;recent?:{at:string;note:string};uid_full?:string;unread?:number|null}
 const rows=ref<Item[]>([]),error=ref(''),at=ref(''),busy=ref(0),loading=ref(true)
@@ -74,9 +77,12 @@ onUnmounted(()=>{alive=false;if(timer)clearInterval(timer)})
     <button :disabled="!!busy||!r.ready" @click="open(r,'/auto')"><Icon name="settings" :size="15"/>任务设置</button>
     <button :disabled="!!busy||!r.ready" @click="open(r,'/activity')">运行记录</button>
     <button :disabled="!!busy||!r.ready" :title="r.unread!=null?(r.unread?`这个号有 ${r.unread} 条未看消息`:'这个号没有未看消息'):(r.current?'还没读过消息，点进去读一次':'切到这个号才能读到它有几条未看')" @click="open(r,'/inbox')"><Icon name="inbox" :size="15"/>消息<span v-if="r.unread" class="msg-badge">{{r.unread}}</span></button>
+    <button :disabled="!r.ready" @click="groupAccount=r">关注分组</button>
   </footer>
 </article>
 </div>
+<Auto shared-only/>
+<FollowGroups v-if="groupAccount" :account="groupAccount" @close="groupAccount=null"/>
 </div></template>
 <style scoped>
 .standby-workspace{max-width:1440px;margin:auto;display:flex;flex-direction:column;gap:18px}

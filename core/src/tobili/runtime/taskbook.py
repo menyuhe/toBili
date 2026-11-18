@@ -50,6 +50,7 @@ class TaskBook:
         self.stop = threading.Event()
         self.guard = threading.RLock()
         self.worker = None
+        self.next_tick_at = 0.0
         self.runners = {}
         self.active = {}
 
@@ -203,7 +204,10 @@ class TaskBook:
         self.worker.start()
 
     def loop(self):
-        while not self.stop.wait(10):
+        while not self.stop.is_set():
+            self.next_tick_at = time.time() + 10
+            if self.stop.wait(10):
+                return
             for owner in self.box.repos.accounts.ids():
                 if self.stop.is_set():
                     return
