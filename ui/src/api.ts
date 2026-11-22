@@ -494,7 +494,7 @@ export const api = {
 
   gate: () => req<Gate>('/api/tidy/gate'),
   pause: (reason: string) => post<{ paused: boolean; reason: string }>('/api/tidy/pause', { reason }),
-  resume: () => post<{ open: boolean; reason: string; hint: string }>('/api/tidy/resume'),
+  resume: (accountId:number) => post<{ open: boolean; reason: string; hint: string }>('/api/tidy/resume?account_id='+accountId),
   ack: () => post<{ acked_chat: number; acked_system: number }>('/api/tidy/ack'),
 
   preview: (limit?: number) =>

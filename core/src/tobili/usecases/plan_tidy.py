@@ -75,6 +75,7 @@ class PlanTidy:
         limit: int | None = None,
         persist: bool = True,
         automatic: bool = False,
+        count_all: bool = False,
     ) -> TidyPreview:
         now = self._clock.now()
         rows = self._verdicts.lost_before(account_id, before=now)
@@ -118,10 +119,12 @@ class PlanTidy:
                 candidate,
                 now=now,
                 policy=self._policy,
-                up_deleted_in_round=per_up.get(candidate.up_uid, 0),
+                up_deleted_in_round=0
+                if count_all and not persist
+                else per_up.get(candidate.up_uid, 0),
                 kept=hit.label() if hit else "",
             )
-            allowed = verdict.allowed and len(picked) < cap
+            allowed = verdict.allowed and (len(picked) < cap or (count_all and not persist))
             reason = verdict.reason if allowed or not verdict.allowed else f"本轮已达上限 {cap} 条"
             if allowed:
                 per_up[candidate.up_uid] = per_up.get(candidate.up_uid, 0) + 1

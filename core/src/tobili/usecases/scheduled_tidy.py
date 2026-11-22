@@ -5,6 +5,7 @@ import json
 from ..domain.action import ActionKind
 from ..domain.result import confirmed_loss
 from ..domain.tidy import TidyPolicy
+from ..runtime.cleanup_schedule import GAP, pacing
 from .execute_tidy import TidyBlocked
 
 
@@ -49,9 +50,13 @@ def _pending_follows(box, owner):
 
 
 def clean_lost_shares(box, owner, *, apply, active):
+    if apply and box.repos.settings.get(owner, "tidy.paused", "0") == "1":
+        raise TidyBlocked("清理已暂停")
     policy = TidyPolicy(grace_hours=0)
     planner = box.plan_tidy(policy=policy)
-    preview = planner.run(owner, automatic=True, persist=False)
+    preview = planner.run(owner, automatic=True, persist=False, count_all=True)
+    if apply:
+        box.repos.settings.put(owner, "tidy.backlog", str(preview.clearable))
     if not apply or not (preview.clearable or _pending_follows(box, owner)):
         return dict(
             scanned=len(preview.lines),
@@ -59,6 +64,11 @@ def clean_lost_shares(box, owner, *, apply, active):
             note=f"符合清理条件的未中奖转发 {preview.clearable} 条",
         )
 
+    def remaining():
+        return max(0, pacing(box, owner)[0] - box.clock.now().timestamp())
+
+    if preview.clearable and (delay := remaining()):
+        return dict(scanned=0, written=0, note="等待账号写入间隔", next_seconds=delay)
     if box.check_writer:
         box.check_writer(owner)
     profile = box.repos.accounts.by_id(owner)
@@ -95,6 +105,8 @@ def clean_lost_shares(box, owner, *, apply, active):
                 or not _finished_losses(box, owner, uid)
             ):
                 raise TidyBlocked("保留关注：关注来源或活动状态已改变")
+        elif action.kind is ActionKind.DELETE_DYN and remaining():
+            raise TidyBlocked("等待账号写入间隔")
         elif action.kind is not ActionKind.DELETE_DYN:
             raise TidyBlocked("清理动作不匹配")
 
@@ -110,7 +122,7 @@ def clean_lost_shares(box, owner, *, apply, active):
             )
             raise
 
-    plan = planner.run(owner, automatic=True)
+    plan = planner.run(owner, automatic=True, limit=1)
     removed = skipped = failed = unfollowed = retained = 0
     ok = True
     if plan.persisted:
@@ -164,7 +176,10 @@ def clean_lost_shares(box, owner, *, apply, active):
         if result.failed or result.plan_state != "done":
             ok = False
             break
+    backlog = max(0, preview.clearable - removed)
+    box.repos.settings.put(owner, "tidy.backlog", str(backlog))
     return dict(
+        **({"next_seconds": GAP} if backlog and ok else {}),
         scanned=len(preview.lines),
         written=removed + unfollowed,
         ok=ok,

@@ -6,7 +6,7 @@ import time
 
 from ..domain.errors import Fault, MissingCredential, RemoteError, TemporaryWriteUnavailable
 from ..domain.pool import EmptyPool
-from . import shared_tasks
+from . import cleanup_schedule, shared_tasks
 from .lane import BusyAccount
 from .redact import safe_exception
 from .work_priority import participation_turn, requested
@@ -58,6 +58,8 @@ class TaskBook:
         settings = self.box.repos.settings
         retry = float(settings.get(owner, f"tasks.retry.{key}", "0"))
         at = retry or float(settings.get(owner, f"tasks.due.{key}", "0"))
+        if key == "lost_shares":
+            at = max(at, cleanup_schedule.pacing(self.box, owner)[0])
         return max(at, float(settings.get(owner, "tasks.cooldown", "0")))
 
     def config(self, owner):
@@ -92,10 +94,13 @@ class TaskBook:
     def view(self, owner):
         config = self.config(owner)
         settings = self.box.repos.settings
+        cleanup = cleanup_schedule.status(self.box, owner)
         upcoming = []
         now = time.time()
         if config["running"]:
             for task in config["tasks"]:
+                if task["key"] == "lost_shares" and cleanup["paused"]:
+                    continue
                 if (
                     task["enabled"]
                     and task["key"] not in shared_tasks.COMMON
@@ -123,6 +128,7 @@ class TaskBook:
                     )
         return {
             **config,
+            "cleanup": cleanup,
             "next": min(upcoming, key=lambda item: item["at"]) if upcoming else None,
             "next_scheduled": scheduled_next,
             "account_id": owner,
@@ -239,11 +245,16 @@ class TaskBook:
         with self.guard:
             config = self.config(owner)
             common = shared_tasks.config(self.box)
+            paused = self.box.repos.settings.get(owner, "tidy.paused", "0") == "1"
             active = [
                 t
                 for t in config["tasks"]
                 if config["running"] and t["enabled"] and t["key"] not in shared_tasks.COMMON
             ]
+            if paused:
+                if self.box.repos.settings.get(owner, "tasks.retry.lost_shares", "0") != "0":
+                    self.box.repos.settings.put(owner, "tasks.retry.lost_shares", "0")
+                active = [t for t in active if t["key"] != "lost_shares"]
             active.extend(
                 t
                 for t in common["tasks"]

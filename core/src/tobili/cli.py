@@ -339,9 +339,8 @@ def _tidy_resume(args: argparse.Namespace) -> int:
     try:
         account = box.require_account()
         gate = box.cleaning_gate()
-        gate.resume(account[0])
-        decision = gate.check(account[0])
-        _ok("已恢复。" if decision.open else f"已撤销暂停，但闸门仍然关闭：{decision.explain()}")
+        decision = gate.resume(account[0])
+        _ok("已恢复。" if decision.open else f"清理仍受保护：{decision.explain()}")
         return 0
     except MissingCredential as exc:
         print(str(exc))

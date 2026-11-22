@@ -574,3 +574,48 @@ def test_shared_status_explains_slot_and_standby(setup):
     assert client.get("/api/tasks/shared").json()["states"]["collections"]["next_at"] == slot
     box.resource_policy.allowed = lambda owner: False
     assert client.get("/api/tasks/shared").json()["states"]["topics"]["status"] == "本机无执行账号"
+
+
+def test_paused_cleanup_remains_enabled_but_never_runs(setup):
+    client, box = setup
+    owner = 1
+    body = config(client, running=True, confirmed=True)
+    for t in body["tasks"]:
+        t["enabled"] = t["key"] in ("lost_shares", "messages")
+    assert client.put("/api/tasks", json=body).is_success
+    settings = box.repos.settings
+    settings.put(owner, "tidy.paused", "1")
+    settings.put(owner, "tidy.pause_reason", "执行清理时遇到风控")
+    settings.put(owner, "tasks.retry.lost_shares", "1")
+    settings.put(owner, "tasks.due.messages", "1")
+    calls = []
+    box.tasks.run = lambda account, key, *args, **kwargs: calls.append(key) or {"ok": True}
+    for _ in range(3):
+        TaskBook(box).view(owner)
+        box.tasks.tick(owner)
+    assert calls == ["messages"]
+    assert settings.get(owner, "tasks.retry.lost_shares") == "0"
+    assert client.get("/api/tasks").json()["next"]["key"] == "messages"
+    assert client.post("/api/tidy/resume?account_id=2").status_code == 409
+    assert settings.get(owner, "tidy.paused") == "1"
+
+
+def test_cleanup_ledger_spacing_survives_restart(setup):
+    from datetime import timedelta
+
+    from tobili.domain.action import ActionKind
+    from tobili.domain.campaign import Campaign
+    from tobili.runtime.cleanup_schedule import pacing
+
+    _client, box = setup
+    now = box.clock.now()
+    cid = box.repos.campaigns.upsert(Campaign("405", "42", "演示"))
+    for i, (kind, age) in enumerate(
+        [(ActionKind.SHARE, 301), (ActionKind.DELETE_DYN, 150), (ActionKind.LIKE, 4)]
+    ):
+        at = now - timedelta(seconds=age)
+        box.repos.intents.reserve(
+            account_id=1, campaign_id=cid, action=kind, fingerprint=str(i), content="", now=at
+        )
+        assert abs(TaskBook(box).due_at(1, "lost_shares") - at.timestamp() - 300) < 0.01
+    assert pacing(box, 2)[0] == 0

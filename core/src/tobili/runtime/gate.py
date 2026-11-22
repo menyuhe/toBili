@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import timedelta
 
 from ..domain.gate import CleaningSignals, GateDecision, GatePolicy, decide
@@ -86,10 +86,17 @@ class CleaningGate:
     def pause(self, account_id: int, reason: str = "") -> None:
         self._settings.put(account_id, PAUSED, "1")
         self._settings.put(account_id, PAUSE_REASON, reason.strip() or "手动暂停")
+        self._settings.put(account_id, "tasks.retry.lost_shares", "0")
 
-    def resume(self, account_id: int) -> None:
+    def resume(self, account_id: int) -> GateDecision:
+        signals = self.inspect(account_id).signals
+        decision = decide(replace(signals, paused=False, pause_reason=""), self._policy)
+        if not decision.open:
+            return decision
+        self._settings.put(account_id, "tasks.retry.lost_shares", "0")
         self._settings.put(account_id, PAUSED, "0")
         self._settings.put(account_id, PAUSE_REASON, "")
+        return decision
 
     def is_paused(self, account_id: int) -> bool:
         return self._settings.get(account_id, PAUSED, "0") == "1"

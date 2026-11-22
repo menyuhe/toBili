@@ -218,11 +218,18 @@ def pause(body: PauseIn | None = None, box: Container = Depends(get_container)) 
 
 
 @router.post("/resume")
-def resume(box: Container = Depends(get_container)) -> dict:
-    account_id, _ = _account(box)
-    gate = box.cleaning_gate()
-    gate.resume(account_id)  # type: ignore[arg-type]
-    decision = gate.check(account_id)  # type: ignore[arg-type]
+def resume(account_id: int | None = None, box: Container = Depends(get_container)) -> dict:
+    from .schedule import owner
+
+    current = owner(box, account_id)
+    if account_id is None:
+        raise HTTPException(409, "请确认要恢复的账号")
+    try:
+        with box.lanes.exclusive(current):
+            owner(box, current)
+            decision = box.cleaning_gate(current).resume(current)
+    except BusyAccount as exc:
+        raise HTTPException(409, "账号正在执行任务，请稍后恢复") from exc
     return {"open": decision.open, "reason": decision.reason, "hint": decision.hint}
 
 

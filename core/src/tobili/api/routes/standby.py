@@ -70,6 +70,10 @@ def view(box: Container = Depends(get_container)):
                     and (plan["running"] or plan["sources_running"] or legacy.running)
                 ),
                 "enabled": enabled,
+                "cleanup": plan["cleanup"],
+                "cleanup_next": float(plan["states"]["lost_shares"]["next_at"])
+                if plan["running"] and TASKS["lost_shares"][0] in enabled
+                else 0,
                 "pending": pending,
                 "hourly_used": plan["hourly_used"],
                 "recent": recent,

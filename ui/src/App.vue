@@ -105,7 +105,7 @@ const gateChip = computed(() => {
       text: '清理状态未知',
       title: state.guardError || '读取闸门状态失败，按不可执行处理',
     }
-  if (gate.paused) return { cls: 'chip chip-danger', text: '已暂停', title: gate.reason || '手动暂停' }
+  if (gate.paused) return { cls: 'chip chip-danger', text: '清理已暂停', title: gate.reason || '手动暂停' }
   if (!gate.open) return { cls: 'chip chip-danger', text: '清理暂停', title: gate.reason }
   return { cls: 'chip chip-ok', text: '清理可用', title: gate.reason }
 })

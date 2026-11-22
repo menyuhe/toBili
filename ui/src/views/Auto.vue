@@ -3,6 +3,7 @@ import { computed,onMounted,onUnmounted,ref } from 'vue'
 import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import { registerWorkGuard } from '../workGuard'
 import { req } from '../api'
+import CleanupStatus,{type CleanupState} from '../components/CleanupStatus.vue'
 import Countdown from '../components/Countdown.vue'
 import { state,toast,refreshQueue } from '../store'
 const props=defineProps<{embedded?:boolean;sharedOnly?:boolean}>()
@@ -12,7 +13,7 @@ function navigate(key:Key){if(props.embedded&&!mayLeave())return;emit('navigate'
 type Key='topics'|'collections'|'watch'|'results'|'messages'|'participate'|'cleanup'|'lost_shares'
 type Period={key:Key;enabled:boolean;minutes:number}
 type Run={at:string;ok:boolean;scanned:number;written:number;note:string}
-type Plan={next_scheduled?:{label:string;at:number};account_id:number;running:boolean;apply:boolean;selection:'queue'|'catalog';limit:number;hourly_limit:number;hourly_used:number;active:{key?:Key;since?:string;note?:string};tasks:Period[];legacy_running:boolean;sources_running:boolean;states:Record<Key,{next_at:string;history:Run[];latest:Run|null}>}
+type Plan={cleanup:CleanupState;next_scheduled?:{label:string;at:number};account_id:number;running:boolean;apply:boolean;selection:'queue'|'catalog';limit:number;hourly_limit:number;hourly_used:number;active:{key?:Key;since?:string;note?:string};tasks:Period[];legacy_running:boolean;sources_running:boolean;states:Record<Key,{next_at:string;history:Run[];latest:Run|null}>}
 const choices:Record<Key,{name:string;note:string;tone:string;link:string}>={
  topics:{name:'话题更新',note:'读取已订阅话题中的新活动',tone:'blue',link:'/sources'},
  collections:{name:'UP 合集更新',note:'读取专栏活动链接，继续未完成的扫描',tone:'purple',link:'/sources'},
@@ -104,10 +105,11 @@ onUnmounted(()=>{removeGuard();if(poll)clearInterval(poll)})
    <section v-for="task in personal" :key="task.key" class="panel task-card" :class="['tone-'+choices[task.key].tone,{'task-selected':task.enabled,'participation-card':task.key==='participate'}]">
     <div class="task-card-head"><label><input type="checkbox" v-model="task.enabled" :disabled="!!busy" @change="changed"/><strong>{{choices[task.key].name}}</strong></label><button class="task-link" @click="navigate(task.key)">查看</button></div>
     
+    <CleanupStatus v-if="task.key==='lost_shares'&&view" :status="view.cleanup" :owner="view.account_id" :current="account?.id===view.account_id" :next="view.running&&task.enabled?Number(view.states.lost_shares?.next_at):0" @updated="load()"/>
     <p v-if="task.key==='lost_shares'" class="dim">{{choices[task.key].note}}</p>
-    <div class="task-period"><label>每 <input class="ipt" type="number" :min="['topics','collections','watch'].includes(task.key)?30:5" :max="task.key==='lost_shares'?180:10080" v-model.number="task.minutes" :disabled="!!busy" @input="changed"/> 分钟</label><button :disabled="!!busy" @click="once(task.key)">{{busy===task.key?'处理中…':task.key==='participate'?'参与一次':task.key==='lost_shares'?'清理一次':'运行一次'}}</button></div>
+    <div class="task-period"><label>每 <input class="ipt" type="number" :min="['topics','collections','watch'].includes(task.key)?30:5" :max="task.key==='lost_shares'?180:10080" v-model.number="task.minutes" :disabled="!!busy" @input="changed"/> 分钟</label><button :disabled="!!busy||(task.key==='lost_shares'&&view?.cleanup.paused)" @click="once(task.key)">{{busy===task.key?'处理中…':task.key==='participate'?'参与一次':task.key==='lost_shares'?'清理一次':'运行一次'}}</button></div>
     <div v-if="task.key==='participate'" class="participation-options"><label class="field">活动奖品范围<select class="ipt" v-model="form.selection" :disabled="!!busy" @change="changed"><option value="queue">仅待参与</option><option value="catalog">待参与优先，再选奖品库</option></select></label><label class="field">每轮上限<input class="ipt" type="number" min="1" max="20" v-model.number="form.limit" :disabled="!!busy" @input="changed"/></label><label class="field">每小时参与上限<input class="ipt" type="number" min="1" max="500" v-model.number="form.hourly_limit" :disabled="!!busy" @input="changed"/></label><div class="field"><span>过去 1 小时已尝试 {{view?.hourly_used||0}} 条</span></div></div>
-    <div class="task-status"><span>下次：<Countdown v-if="view?.running&&view.tasks.some(t=>t.key===task.key&&t.enabled)&&Number(view.states[task.key]?.next_at)>0&&view.active.key!==task.key" :at="Number(view.states[task.key].next_at)"/><template v-else>{{view?.active.key===task.key?'执行中':task.enabled?'未排期':'未启用'}}</template></span><p v-if="view?.states[task.key]?.latest&&view.active.key!==task.key" :class="{'warning':!view.states[task.key].latest?.ok}">{{lastNote(task.key)}}</p></div>
+    <div v-if="task.key!=='lost_shares'||!view?.cleanup.paused" class="task-status"><span>下次：<Countdown v-if="view?.running&&view.tasks.some(t=>t.key===task.key&&t.enabled)&&Number(view.states[task.key]?.next_at)>0&&view.active.key!==task.key" :at="Number(view.states[task.key].next_at)"/><template v-else>{{view?.active.key===task.key?'执行中':task.enabled?'未排期':'未启用'}}</template></span><p v-if="view?.states[task.key]?.latest&&view.active.key!==task.key" :class="{'warning':!view.states[task.key].latest?.ok}">{{lastNote(task.key)}}</p></div>
    </section>
   </div>
   <details class="panel task-history"><summary>最近运行 · {{histories.length}} 条</summary><div class="table-scroll"><table class="dense w-full" v-if="histories.length"><thead><tr><th>时间</th><th>功能</th><th>结果</th><th>说明</th></tr></thead><tbody><tr v-for="(run,i) in histories" :key="i"><td>{{new Date(run.at).toLocaleString('zh-CN')}}</td><td>{{choices[run.key].name}}</td><td><span class="chip" :class="run.ok?'chip-ok':'chip-warn'">{{run.ok?'完成':'未完成'}}</span></td><td class="run-note">{{run.note}}</td></tr></tbody></table><p v-else class="empty-state">暂无运行记录</p></div></details>

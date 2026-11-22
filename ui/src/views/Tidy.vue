@@ -319,7 +319,7 @@ onMounted(async () => {
         <div class="gate-line">
           <span class="dot" :style="{ color: gate?.open ? 'var(--ok)' : 'var(--danger)' }" />
           <template v-if="!gate">闸门状态未知</template>
-          <template v-else-if="gate.paused">已手动暂停，执行会被拒绝</template>
+          <template v-else-if="gate.paused">{{gate.reason}}</template>
           <template v-else-if="!gate.open">{{ gate.reason }}</template>
           <template v-else>闸门开启，可以执行</template>
         </div>

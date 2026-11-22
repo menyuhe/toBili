@@ -75,6 +75,7 @@ LOGOS = {
     "docs/public/media/queue.png",
     "docs/public/media/schedule.png",
     "docs/public/media/accounts.png",
+    "docs/public/media/cleanup-paused.png",
     "docs/public/media/workflow.gif",
     "docs/public/media/account-status.gif",
     "docs/public/media/shared-schedule.png",

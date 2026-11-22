@@ -372,7 +372,7 @@ class ExecuteTidy(EditTidy):
         state, message, stop = _translate(step)
         self._close_item(item_id, state, message)
         if stop:
-            self._pause_on_risk(account_id, step)
+            self._pause_on_risk(account_id, step, "删除转发")
         return ExecLine(item_id, dyn_id, up_name, "drop_share", state, message), stop
 
     # ---- 取关 ----
@@ -435,7 +435,7 @@ class ExecuteTidy(EditTidy):
                 now=self._clock.now(),
             )
         if stop:
-            self._pause_on_risk(account_id, step)
+            self._pause_on_risk(account_id, step, "取消关注")
         return ExecLine(item_id, dyn_id, up_name, "unfollow", state, message), stop
 
     # ---- 阶段四：回滚 ----
@@ -499,9 +499,10 @@ class ExecuteTidy(EditTidy):
             item_id, state=state, reason=message, target=target, now=self._clock.now()
         )
 
-    def _pause_on_risk(self, account_id: int, step: Step) -> None:
+    def _pause_on_risk(self, account_id: int, step: Step, action: str) -> None:
         if step.fault is Fault.RISK:
-            self._gate.pause(account_id, "执行清理时遇到风控")
+            stamp = self._clock.now().astimezone().strftime("%m/%d %H:%M")
+            self._gate.pause(account_id, f"{stamp} {action} · {step.message}")
 
     def _wrap_up(self, plan_id: int, *, aborted: bool) -> str:
         pending = self._tidy.pending_items(plan_id)

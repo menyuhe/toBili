@@ -4,6 +4,7 @@ import {useRouter} from 'vue-router'
 import {api,req,type AccountRow} from '../api'
 import {canChangeAccount} from '../workGuard'
 import {refreshAll,toast} from '../store'
+import CleanupStatus,{type CleanupState} from '../components/CleanupStatus.vue'
 import Countdown from '../components/Countdown.vue'
 import Icon from '../components/Icon.vue'
 import AccountAvatar from '../components/AccountAvatar.vue'
@@ -12,7 +13,7 @@ import Auto from './Auto.vue'
 import FollowGroups from '../components/FollowGroups.vue'
 const groupAccount=ref<Item|null>(null)
 import QrLogin from '../components/QrLogin.vue'
-type Item=AccountRow&{active:{label?:string;note?:string;since?:string};next?:{label:string;at:number};running:boolean;enabled:string[];pending:number;hourly_used:number;recent?:{at:string;note:string};uid_full?:string;unread?:number|null}
+type Item=AccountRow&{cleanup:CleanupState;cleanup_next:number;active:{label?:string;note?:string;since?:string};next?:{label:string;at:number};running:boolean;enabled:string[];pending:number;hourly_used:number;recent?:{at:string;note:string};uid_full?:string;unread?:number|null}
 const rows=ref<Item[]>([]),error=ref(''),at=ref(''),busy=ref(0),loading=ref(true)
 const relogin=ref(0)
 const router=useRouter();let alive=true,timer:ReturnType<typeof setInterval>|undefined
@@ -50,6 +51,7 @@ onUnmounted(()=>{alive=false;if(timer)clearInterval(timer)})
   </header>
 
   <div class="account-body">
+    <CleanupStatus :status="r.cleanup" :owner="r.id" :current="r.current" :next="r.cleanup_next" @updated="load"/>
     <AccountStatus :account="r" @login="relogin=r.id"/>
     <div v-if="relogin===r.id" class="panel p-3"><p>请用「{{r.nickname}}」扫码，原资料与排期保留。</p><QrLogin @done="relogin=0;load()"/><button @click="relogin=0">关闭</button></div>
     <div class="label-row">
